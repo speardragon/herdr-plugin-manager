@@ -239,7 +239,31 @@ pause_key() {
   IFS= read -rsn1 || true
 }
 
-# Runs (or dry-run prints) a mutating herdr command, then refreshes list + checks.
+# Runs a quick mutating command (toggle/uninstall) silently — the herdr CLI
+# replies with a JSON blob that is pure noise in a popup, so success becomes a
+# one-line msg and the refreshed list (●/○) is the real feedback. No pause.
+#   $1 = success message, rest = herdr args
+run_quiet() {
+  local ok_msg="$1" out line
+  shift
+  if [ "$dry_run" = 1 ]; then
+    local shown=""
+    printf -v shown ' %q' "$@"
+    msg="${yellow}[dry-run]${reset} $herdr$shown"
+    return
+  fi
+  out="$("$herdr" "$@" 2>&1)"
+  if [ $? -eq 0 ]; then
+    msg="${green}✓${reset} $ok_msg"
+  else
+    line="$(printf '%s\n' "$out" | grep -m1 . | cut -c1-58)"
+    msg="${red}✗ failed${reset}${line:+ — $line}"
+  fi
+  load_plugins
+}
+
+# Runs (or dry-run prints) a long mutating command (install/update) with output
+# streamed — clone/build progress is worth watching — then refreshes + checks.
 run_mut() {
   local status=0
   printf '\n'
@@ -298,9 +322,9 @@ do_toggle() {
   [ ${#rows[@]} -eq 0 ] && return
   split_row "${rows[$sel]}"
   if [ "$r_en" = 1 ]; then
-    run_mut plugin disable "$r_id"
+    run_quiet "disabled $r_name" plugin disable "$r_id"
   else
-    run_mut plugin enable "$r_id"
+    run_quiet "enabled $r_name" plugin enable "$r_id"
   fi
 }
 
@@ -313,7 +337,7 @@ do_uninstall() {
   local k=""
   IFS= read -rsn1 k || true
   case "$k" in
-    y|Y) run_mut plugin "$verb" "$r_id" ;;
+    y|Y) run_quiet "${verb}ed $r_name" plugin "$verb" "$r_id" ;;
     *) msg="${dim}$verb cancelled${reset}" ;;
   esac
 }
