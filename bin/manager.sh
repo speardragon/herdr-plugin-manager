@@ -573,7 +573,7 @@ draw_market() {
   total="$(display_total)"
   label="topic:herdr-plugin"
   [ -n "$m_query" ] && label="\"$m_query\""
-  put '  %bherdr Plugin Marketplace%b  %b%s · by %s%b' \
+  put '  %bherdr marketplace%b  %b%s · by %s%b' \
     "$bold" "$reset" "$dim" "$label" "$m_sort" "$reset"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
