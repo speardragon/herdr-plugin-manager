@@ -83,7 +83,11 @@ check_remote() {
   local slug="$1" ref="$2" commit="$3" target shas
   target="$ref"
   { [ -z "$target" ] || [ "$target" = "-" ]; } && target="HEAD"
+  # perl's alarm hard-caps the whole ls-remote at 8s — git's LOW_SPEED vars only
+  # cover the transfer phase, so a stalled connect could otherwise freeze the
+  # popup for minutes while the startup check blocks the input loop.
   shas="$(GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=5 \
+    perl -e 'alarm 8; exec @ARGV' -- \
     git ls-remote "https://github.com/$slug" "$target" 2>/dev/null | cut -f1)"
   if [ -z "$shas" ]; then
     printf 'error'
@@ -213,16 +217,25 @@ draw() {
 
 # ── input ────────────────────────────────────────────────────────────────────
 
-# Echoes a token: a literal key char, "up"/"down", "noop" (ignored escape
-# sequence), or "q" (bare Esc / EOF). The first byte is read blocking; an arrow
-# key's continuation bytes are already buffered so the timed second read returns
-# them, while a bare Esc leaves nothing and that read returns empty.
+# Echoes a token: a literal key char, "up"/"down", "enter", "noop" (ignored
+# escape sequence), or "q" (bare Esc / EOF). The first byte is read blocking.
+# After an ESC, arrow continuation bytes are already buffered and come back
+# instantly; only a bare Esc has to wait out the disambiguation timer. bash 3.2
+# caps `read -t` at whole seconds (a full 1s pause before an Esc quit closed
+# the popup), so the timer is VMIN=0/VTIME=1 at the tty layer instead — the dd
+# returns within ~0.1s when no bytes follow.
 read_key() {
-  local k rest=''
+  local k rest='' saved=''
   IFS= read -rsn1 k || { printf 'q'; return; }
   [ -z "$k" ] && { printf 'enter'; return; }
   if [ "$k" = $'\e' ]; then
-    IFS= read -rsn2 -t 1 rest || true
+    if saved="$(stty -g 2>/dev/null)" && [ -n "$saved" ]; then
+      stty -icanon -echo min 0 time 1 2>/dev/null
+      rest="$(dd bs=2 count=1 2>/dev/null)"
+      stty "$saved" 2>/dev/null
+    else
+      IFS= read -rsn2 -t 1 rest || true
+    fi
     case "$rest" in
       '[A'|'OA') printf 'up' ;;
       '[B'|'OB') printf 'down' ;;
