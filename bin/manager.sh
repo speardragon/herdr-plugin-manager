@@ -76,7 +76,11 @@ start_ascii_input() {
   [ "$(uname)" = Darwin ] && command -v osascript >/dev/null 2>&1 || return 0
   ( nohup osascript -l JavaScript "$root/bin/input_source.js" switch-ascii \
       > "$tmpdir/prev-input" 2>/dev/null < /dev/null & ) 2>/dev/null
-  ( nohup bash "$root/bin/restore_watchdog.sh" "$$" "$tmpdir/prev-input" \
+  # The watchdog must live in its OWN session: herdr kills the pane's whole
+  # process group when the popup dies, and nohup doesn't stop that. macOS has
+  # no setsid binary, so perl's POSIX::setsid detaches it instead.
+  ( nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' -- \
+      bash "$root/bin/restore_watchdog.sh" "$$" "$tmpdir/prev-input" \
       "$root/bin/input_source.js" >/dev/null 2>&1 < /dev/null & ) 2>/dev/null
 }
 
