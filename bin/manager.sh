@@ -31,11 +31,17 @@ msg=""
 checked=0
 
 # Marketplace state (m key). Same index that powers https://herdr.dev/plugins/.
-market_api="https://api.github.com/search/repositories?q=topic:herdr-plugin&sort=stars&order=desc&per_page=50"
+# Pages of 50 are fetched lazily: page 1 on open, the next page when the cursor
+# walks off the bottom. per_page is overridable for tests.
+market_per_page="${HERDR_PM_MARKET_PER_PAGE:-50}"
+market_api="https://api.github.com/search/repositories?q=topic:herdr-plugin&sort=stars&order=desc&per_page=${market_per_page}"
 view="main"
 mrows=()
 msel=0
 market_loaded=0
+mpage=0
+m_total=0
+m_more=0
 
 have_git=0
 command -v git >/dev/null 2>&1 && have_git=1
@@ -423,24 +429,34 @@ split_mrow() {
   read -r m_name m_stars m_desc <<< "$1"
 }
 
+# Fetches one page of marketplace results; page 1 resets the list, later pages
+# append. Sets m_total from the API's total_count and m_more while the loaded
+# list is still shorter than the total (GitHub search stops serving at 1000).
 fetch_market() {
-  local json line
+  local page="${1:-1}" json line added=0
   buf=""
-  put '\n  %bfetching marketplace…%b\n' "$dim" "$reset"
+  put '\n  %bfetching marketplace (page %s)…%b\n' "$dim" "$page" "$reset"
   draw_flush
-  json="$(curl -s --max-time 8 -H 'Accept: application/vnd.github+json' "$market_api" 2>/dev/null)" || json=""
-  mrows=()
+  json="$(curl -s --max-time 8 -H 'Accept: application/vnd.github+json' "${market_api}&page=${page}" 2>/dev/null)" || json=""
+  [ "$page" -eq 1 ] && mrows=()
   if [ -n "$json" ]; then
     while IFS= read -r line; do
-      [ -n "$line" ] && mrows+=("$line")
+      case "$line" in
+        '') ;;
+        '#total'*) m_total="${line##*$'\t'}" ;;
+        *) mrows+=("$line"); added=$(( added + 1 )) ;;
+      esac
     done < <(printf '%s' "$json" | python3 "$root/bin/parse_market.py" 2>/dev/null)
   fi
-  if [ ${#mrows[@]} -eq 0 ]; then
-    market_loaded=0
-    msg="${red}marketplace fetch failed — offline or GitHub rate limit, try r later${reset}"
+  if [ "$added" -eq 0 ]; then
+    [ "$page" -eq 1 ] && market_loaded=0
+    msg="${red}marketplace fetch failed — offline or GitHub rate limit, try again later${reset}"
   else
     market_loaded=1
+    mpage="$page"
   fi
+  m_more=0
+  [ ${#mrows[@]} -gt 0 ] && [ ${#mrows[@]} -lt "${m_total:-0}" ] && [ ${#mrows[@]} -lt 1000 ] && m_more=1
   local last=$(( ${#mrows[@]} - 1 ))
   [ "$msel" -gt "$last" ] && msel=$last
   [ "$msel" -lt 0 ] && msel=0
@@ -485,13 +501,17 @@ draw_market() {
     done
     put '\n'
     split_mrow "${mrows[$msel]}"
+    local total="${m_total:-0}"
+    [ "$total" -lt ${#mrows[@]} ] && total=${#mrows[@]}
     put '  %b──────────────────────────────────────────────────────────%b\n' "$dim" "$reset"
-    put '  %b%d/%d%b  %-58.58s\n' "$dim" "$(( msel + 1 ))" "${#mrows[@]}" "$reset" "$m_desc"
+    put '  %b%d/%d%b  %-56.56s\n' "$dim" "$(( msel + 1 ))" "$total" "$reset" "$m_desc"
     if market_installed "$m_name"; then
       put '  %b✓ already installed%b\n' "$green" "$reset"
     else
       put '  %bEnter installs github.com/%s%b\n' "$dim" "$m_name" "$reset"
     fi
+    [ "$m_more" = 1 ] && [ "$msel" -eq $(( ${#mrows[@]} - 1 )) ] && \
+      put '  %b↓ down loads the next %s%b\n' "$dim" "$market_per_page" "$reset"
   fi
 
   put '\n'
@@ -546,11 +566,21 @@ while true; do
   msg=""
   if [ "$view" = market ]; then
     case "$key" in
-      j|down) [ ${#mrows[@]} -gt 0 ] && msel=$(( (msel + 1) % ${#mrows[@]} )) ;;
+      j|down)
+        if [ ${#mrows[@]} -gt 0 ]; then
+          # Walking off the loaded bottom pulls the next page in; once
+          # everything is loaded, wrap around as usual.
+          if [ "$msel" -eq $(( ${#mrows[@]} - 1 )) ] && [ "$m_more" = 1 ]; then
+            fetch_market $(( mpage + 1 ))
+            [ "$msel" -lt $(( ${#mrows[@]} - 1 )) ] && msel=$(( msel + 1 ))
+          else
+            msel=$(( (msel + 1) % ${#mrows[@]} ))
+          fi
+        fi ;;
       k|up)   [ ${#mrows[@]} -gt 0 ] && msel=$(( (msel - 1 + ${#mrows[@]}) % ${#mrows[@]} )) ;;
       enter|i|I) m_install ;;
       o|O) m_open_repo ;;
-      r|R) fetch_market ;;
+      r|R) msel=0; fetch_market 1 ;;
       m|M|q|Q) view=main ;;
       *) continue ;;
     esac
@@ -564,7 +594,7 @@ while true; do
       x|X) do_uninstall ;;
       o|O) do_open_repo ;;
       c|C) do_plugins_json ;;
-      m|M) view=market; [ "$market_loaded" != 1 ] && fetch_market ;;
+      m|M) view=market; [ "$market_loaded" != 1 ] && fetch_market 1 ;;
       r|R) load_plugins; run_update_checks; msg="${dim}refreshed${reset}" ;;
       q|Q) exit 0 ;;
       *) continue ;;

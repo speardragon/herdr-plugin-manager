@@ -61,14 +61,14 @@ popup을 열면 목록이 즉시 그려지고, 곧이어(≈0.5초) 각 GitHub �
 
 ![marketplace view — community plugins sorted by stars](assets/market.png)
 
-[herdr.dev/plugins](https://herdr.dev/plugins/)와 같은 인덱스 — GitHub에서 `herdr-plugin` topic이 붙은 공개 저장소를 별점순 상위 50개까지 보여준다 (herdr.dev 페이지 자체가 이 topic의 자동 인덱스라서, 원본인 GitHub Search API를 직접 조회한다).
+[herdr.dev/plugins](https://herdr.dev/plugins/)와 같은 인덱스 — GitHub에서 `herdr-plugin` topic이 붙은 공개 저장소를 별점순으로 보여준다 (herdr.dev 페이지 자체가 이 topic의 자동 인덱스라서, 원본인 GitHub Search API를 직접 조회한다). 처음엔 상위 50개만 가져오고, **목록 맨 아래에서 `↓`를 누르면 다음 50개를 이어서 로드**한다 (검색 API 상한인 1000개까지). 하단 순번은 `현재/전체`로 표시된다.
 
 | 키 | 동작 |
 |----|------|
-| `j` / `k` / `↑` / `↓` | 이동 (하단에 설명과 순번 표시) |
+| `j` / `k` / `↑` / `↓` | 이동 (하단에 설명과 순번 표시 · 맨 아래에서 `↓` = 다음 페이지 로드) |
 | `Enter` | **선택한 플러그인 바로 설치** (`herdr plugin install owner/repo --yes`). 이미 설치된 항목(`✓`)은 안내만 표시 |
 | `o` | 해당 repo를 브라우저로 열기 |
-| `r` | 목록 다시 가져오기 |
+| `r` | 처음부터 다시 가져오기 |
 | `q` / `Esc` / `m` | 설치된 플러그인 목록으로 돌아가기 |
 
 네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고 `r`로 재시도할 수 있다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 메인 뷰의 `i`로 `owner/repo/subdir`를 직접 입력하면 된다.
@@ -158,7 +158,7 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 
 ### Marketplace (`m`)
 
-The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, top 50 by stars, queried straight from the GitHub Search API. Move with `j`/`k`/arrows, press **Enter to install the selection** (`herdr plugin install owner/repo --yes`; already-installed repos show a `✓`), `o` to open the repo in your browser, `r` to re-fetch, `q` to go back.
+The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, sorted by stars, queried straight from the GitHub Search API. The first 50 load up front; pressing `↓` at the bottom of the list lazily fetches the next 50 (up to the API's 1000-result cap), with the position shown as `current/total`. Move with `j`/`k`/arrows, press **Enter to install the selection** (`herdr plugin install owner/repo --yes`; already-installed repos show a `✓`), `o` to open the repo in your browser, `r` to re-fetch from the start, `q` to go back.
 
 ### Dry-run mode
 

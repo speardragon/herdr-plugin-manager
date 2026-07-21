@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Parse a GitHub `search/repositories` response (stdin) into TSV rows.
 
-Fields: full_name, stars, description (control chars stripped, truncated,
-"-" when empty). Rows keep the API's order (sorted by stars).
+First line is "#total\t<total_count>" — a '#' can never start a GitHub owner
+name, so it can't collide with a repo row. Then one row per repo: full_name,
+stars, description (control chars stripped, truncated, "-" when empty), in
+the API's order (sorted by stars).
 """
 import json
 import sys
@@ -21,6 +23,7 @@ def main():
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 1
+    print("#total\t{}".format(data.get("total_count") or 0))
     items = data.get("items") or []
     for repo in items:
         full_name = repo.get("full_name")
