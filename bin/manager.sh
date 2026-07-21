@@ -31,17 +31,21 @@ msg=""
 checked=0
 
 # Marketplace state (m key). Same index that powers https://herdr.dev/plugins/.
-# Pages of 50 are fetched lazily: page 1 on open, the next page when the cursor
-# walks off the bottom. per_page is overridable for tests.
+# The result set is browsed in display pages of MARKET_VIS items (←/→), backed
+# by sparse API pages of market_per_page fetched on demand. `/` re-queries the
+# GitHub Search API with extra terms; `s` toggles the sort. per_page is
+# overridable for tests.
+MARKET_VIS=10
 market_per_page="${HERDR_PM_MARKET_PER_PAGE:-50}"
-market_api="https://api.github.com/search/repositories?q=topic:herdr-plugin&sort=stars&order=desc&per_page=${market_per_page}"
 view="main"
-mrows=()
-msel=0
+mrows=()           # sparse: mrows[global_index]
+msel=0             # selected global index into the result set
+mpg=0              # current display page, 0-based
 market_loaded=0
-mpage=0
-m_total=0
-m_more=0
+m_total=0          # API total_count for the current query
+m_query=""         # extra search terms ('' = whole topic)
+m_sort="stars"     # stars | updated
+m_pages_fetched=" "  # " 1 2 " — API pages already stored
 
 have_git=0
 command -v git >/dev/null 2>&1 && have_git=1
@@ -245,6 +249,8 @@ read_key() {
     case "$rest" in
       '[A'|'OA') printf 'up' ;;
       '[B'|'OB') printf 'down' ;;
+      '[C'|'OC') printf 'right' ;;
+      '[D'|'OD') printf 'left' ;;
       '') printf 'q' ;;
       *) printf 'noop' ;;
     esac
@@ -429,37 +435,96 @@ split_mrow() {
   read -r m_name m_stars m_desc <<< "$1"
 }
 
-# Fetches one page of marketplace results; page 1 resets the list, later pages
-# append. Sets m_total from the API's total_count and m_more while the loaded
-# list is still shorter than the total (GitHub search stops serving at 1000).
-fetch_market() {
-  local page="${1:-1}" json line added=0
+market_url() {
+  local q="topic:herdr-plugin" enc
+  if [ -n "$m_query" ]; then
+    enc="$(python3 -c 'import sys, urllib.parse as u; print(u.quote_plus(sys.argv[1]))' "$m_query" 2>/dev/null)" || enc=""
+    [ -n "$enc" ] && q="${q}+${enc}"
+  fi
+  printf 'https://api.github.com/search/repositories?q=%s&sort=%s&order=desc&per_page=%s&page=%s' \
+    "$q" "$m_sort" "$market_per_page" "$1"
+}
+
+# Drops all fetched results (query/sort unchanged) so the next fetch starts over.
+market_reset() {
+  mrows=()
+  m_pages_fetched=" "
+  m_total=0
+  msel=0
+  mpg=0
+  market_loaded=0
+}
+
+# GitHub search serves at most 1000 results; browse within that.
+display_total() {
+  local t="${m_total:-0}"
+  [ "$t" -gt 1000 ] && t=1000
+  printf '%s' "$t"
+}
+
+# Fetches one API page into its sparse slots (no-op when already stored).
+# A page with zero rows is still a success as long as #total arrived — a narrow
+# query can legitimately match nothing.
+fetch_market_page() {
+  local page="$1" json line base n=0 saw_total=0
+  case "$m_pages_fetched" in *" $page "*) return 0 ;; esac
   buf=""
-  put '\n  %bfetching marketplace (page %s)…%b\n' "$dim" "$page" "$reset"
+  put '\n  %bfetching…%b\n' "$dim" "$reset"
   draw_flush
-  json="$(curl -s --max-time 8 -H 'Accept: application/vnd.github+json' "${market_api}&page=${page}" 2>/dev/null)" || json=""
-  [ "$page" -eq 1 ] && mrows=()
+  json="$(curl -s --max-time 8 -H 'Accept: application/vnd.github+json' "$(market_url "$page")" 2>/dev/null)" || json=""
+  base=$(( (page - 1) * market_per_page ))
   if [ -n "$json" ]; then
     while IFS= read -r line; do
       case "$line" in
         '') ;;
-        '#total'*) m_total="${line##*$'\t'}" ;;
-        *) mrows+=("$line"); added=$(( added + 1 )) ;;
+        '#total'*) m_total="${line##*$'\t'}"; saw_total=1 ;;
+        *) mrows[$(( base + n ))]="$line"; n=$(( n + 1 )) ;;
       esac
     done < <(printf '%s' "$json" | python3 "$root/bin/parse_market.py" 2>/dev/null)
   fi
-  if [ "$added" -eq 0 ]; then
-    [ "$page" -eq 1 ] && market_loaded=0
+  if [ "$saw_total" = 0 ]; then
     msg="${red}marketplace fetch failed — offline or GitHub rate limit, try again later${reset}"
-  else
-    market_loaded=1
-    mpage="$page"
+    return 1
   fi
-  m_more=0
-  [ ${#mrows[@]} -gt 0 ] && [ ${#mrows[@]} -lt "${m_total:-0}" ] && [ ${#mrows[@]} -lt 1000 ] && m_more=1
-  local last=$(( ${#mrows[@]} - 1 ))
-  [ "$msel" -gt "$last" ] && msel=$last
-  [ "$msel" -lt 0 ] && msel=0
+  m_pages_fetched="${m_pages_fetched}${page} "
+  market_loaded=1
+  return 0
+}
+
+# Makes sure every API page covering global indexes lo..hi is stored.
+ensure_range() {
+  local lo="$1" hi="$2" p last
+  p=$(( lo / market_per_page + 1 ))
+  last=$(( hi / market_per_page + 1 ))
+  while [ "$p" -le "$last" ]; do
+    fetch_market_page "$p" || return 1
+    p=$(( p + 1 ))
+  done
+}
+
+# Moves the cursor to a global index (wrapping at either end), fetching the
+# backing API page first so a failed fetch leaves the cursor where it was.
+goto_idx() {
+  local idx="$1" total
+  total="$(display_total)"
+  [ "$total" -eq 0 ] && return 1
+  [ "$idx" -lt 0 ] && idx=$(( total - 1 ))
+  [ "$idx" -ge "$total" ] && idx=0
+  ensure_range "$idx" "$idx" || return 1
+  [ -n "${mrows[$idx]:-}" ] || return 1
+  msel="$idx"
+  mpg=$(( msel / MARKET_VIS ))
+}
+
+# Flips to a display page (wrapping), landing the cursor on its first item.
+goto_page() {
+  local p="$1" total pages
+  total="$(display_total)"
+  [ "$total" -eq 0 ] && return 1
+  pages=$(( (total + MARKET_VIS - 1) / MARKET_VIS ))
+  [ "$p" -lt 0 ] && p=$(( pages - 1 ))
+  [ "$p" -ge "$pages" ] && p=0
+  goto_idx $(( p * MARKET_VIS ))
 }
 
 # True when owner/repo matches the source slug of an installed plugin.
@@ -472,57 +537,115 @@ market_installed() {
   return 1
 }
 
+# "‹ 1 … 4 [5] 6 … 29 ›" — the current display page among all of them.
+put_pagebar() {
+  local total="$1" pages cur i lo hi
+  pages=$(( (total + MARKET_VIS - 1) / MARKET_VIS ))
+  [ "$pages" -le 1 ] && return 0
+  cur=$(( mpg + 1 ))
+  lo=$(( cur - 2 )); hi=$(( cur + 2 ))
+  [ "$lo" -lt 1 ] && lo=1
+  [ "$hi" -gt "$pages" ] && hi="$pages"
+  put '  %b‹%b ' "$dim" "$reset"
+  if [ "$lo" -gt 1 ]; then
+    put '%b1%b ' "$dim" "$reset"
+    [ "$lo" -gt 2 ] && put '%b…%b ' "$dim" "$reset"
+  fi
+  i=$lo
+  while [ "$i" -le "$hi" ]; do
+    if [ "$i" -eq "$cur" ]; then
+      put '%b[%d]%b ' "$cyan" "$i" "$reset"
+    else
+      put '%b%d%b ' "$dim" "$i" "$reset"
+    fi
+    i=$(( i + 1 ))
+  done
+  if [ "$hi" -lt "$pages" ]; then
+    [ "$hi" -lt $(( pages - 1 )) ] && put '%b…%b ' "$dim" "$reset"
+    put '%b%d%b ' "$dim" "$pages" "$reset"
+  fi
+  put '%b›%b\n' "$dim" "$reset"
+}
+
 draw_market() {
   buf=""
-  put '  %bherdr Plugin Marketplace%b  %btopic:herdr-plugin · by stars%b' \
-    "$bold" "$reset" "$dim" "$reset"
+  local total label
+  total="$(display_total)"
+  label="topic:herdr-plugin"
+  [ -n "$m_query" ] && label="\"$m_query\""
+  put '  %bherdr Plugin Marketplace%b  %b%s · by %s%b' \
+    "$bold" "$reset" "$dim" "$label" "$m_sort" "$reset"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
-  if [ ${#mrows[@]} -eq 0 ]; then
-    put '  %bnothing loaded — press r to retry%b\n' "$dim" "$reset"
+  if [ "$total" -eq 0 ]; then
+    if [ "$market_loaded" = 1 ]; then
+      put '  %bno results — / to change the search, q to go back%b\n' "$dim" "$reset"
+    else
+      put '  %bnothing loaded — press r to retry%b\n' "$dim" "$reset"
+    fi
   else
-    local max_vis=10 start=0 end i
-    [ "$msel" -ge "$max_vis" ] && start=$(( msel - max_vis + 1 ))
-    end=$(( start + max_vis - 1 ))
-    [ "$end" -ge ${#mrows[@]} ] && end=$(( ${#mrows[@]} - 1 ))
+    local start=$(( mpg * MARKET_VIS )) end i
+    end=$(( start + MARKET_VIS - 1 ))
+    [ "$end" -ge "$total" ] && end=$(( total - 1 ))
     i=$start
     while [ "$i" -le "$end" ]; do
-      split_mrow "${mrows[$i]}"
-      local cursor="  " pre="" post="" mark="  "
-      market_installed "$m_name" && mark="${green}✓ ${reset}"
-      if [ "$i" -eq "$msel" ]; then
-        cursor="${cyan}▸ ${reset}"
-        pre="$bold" post="$reset"
+      if [ -z "${mrows[$i]:-}" ]; then
+        put '      %b…%b\n' "$dim" "$reset"
+      else
+        split_mrow "${mrows[$i]}"
+        local cursor="  " pre="" post="" mark="  "
+        market_installed "$m_name" && mark="${green}✓ ${reset}"
+        if [ "$i" -eq "$msel" ]; then
+          cursor="${cyan}▸ ${reset}"
+          pre="$bold" post="$reset"
+        fi
+        put '  %b%b%b%-42.42s %b★ %-5s%b%b\n' \
+          "$cursor" "$mark" "$pre" "$m_name" "$yellow" "$m_stars" "$reset" "$post"
       fi
-      put '  %b%b%b%-42.42s %b★ %-5s%b%b\n' \
-        "$cursor" "$mark" "$pre" "$m_name" "$yellow" "$m_stars" "$reset" "$post"
       i=$(( i + 1 ))
     done
     put '\n'
-    split_mrow "${mrows[$msel]}"
-    local total="${m_total:-0}"
-    [ "$total" -lt ${#mrows[@]} ] && total=${#mrows[@]}
-    put '  %b──────────────────────────────────────────────────────────%b\n' "$dim" "$reset"
-    put '  %b%d/%d%b  %-56.56s\n' "$dim" "$(( msel + 1 ))" "$total" "$reset" "$m_desc"
-    if market_installed "$m_name"; then
-      put '  %b✓ already installed%b\n' "$green" "$reset"
-    else
-      put '  %bEnter installs github.com/%s%b\n' "$dim" "$m_name" "$reset"
+    if [ -n "${mrows[$msel]:-}" ]; then
+      split_mrow "${mrows[$msel]}"
+      put '  %b──────────────────────────────────────────────────────────%b\n' "$dim" "$reset"
+      put '  %b%d/%d%b  %-56.56s\n' "$dim" "$(( msel + 1 ))" "$total" "$reset" "$m_desc"
+      if market_installed "$m_name"; then
+        put '  %b✓ already installed%b\n' "$green" "$reset"
+      else
+        put '  %bEnter installs github.com/%s%b\n' "$dim" "$m_name" "$reset"
+      fi
     fi
-    [ "$m_more" = 1 ] && [ "$msel" -eq $(( ${#mrows[@]} - 1 )) ] && \
-      put '  %b↓ down loads the next %s%b\n' "$dim" "$market_per_page" "$reset"
+    put_pagebar "$total"
   fi
 
   put '\n'
-  put '  %bj/k or ↑/↓ move · Enter install · o repo in browser%b\n' "$dim" "$reset"
-  put '  %br re-fetch · q back to installed%b\n' "$dim" "$reset"
+  put '  %bj/k move · ←/→ page · Enter install · o repo in browser%b\n' "$dim" "$reset"
+  put '  %b/ search · s sort · r refresh · q back%b\n' "$dim" "$reset"
   [ -n "$msg" ] && put '\n  %b\n' "$msg"
   draw_flush
 }
 
+# / — re-query the API with extra search terms (matches name/description/readme
+# across the whole topic, not just the loaded rows). Empty input goes back to
+# the unfiltered topic listing.
+m_search() {
+  printf '\n'
+  prompt_line "  search (empty = all): "
+  m_query="$REPLY"
+  market_reset
+  fetch_market_page 1 || true
+}
+
+# s — flip the API sort between most-starred and most-recently-updated.
+m_sort_toggle() {
+  if [ "$m_sort" = stars ]; then m_sort="updated"; else m_sort="stars"; fi
+  market_reset
+  fetch_market_page 1 || true
+}
+
 m_install() {
-  [ ${#mrows[@]} -eq 0 ] && return
+  [ -n "${mrows[$msel]:-}" ] || return 0
   split_mrow "${mrows[$msel]}"
   if market_installed "$m_name"; then
     msg="${green}$m_name is already installed${reset} — update it from the main list (u)"
@@ -532,7 +655,7 @@ m_install() {
 }
 
 m_open_repo() {
-  [ ${#mrows[@]} -eq 0 ] && return
+  [ -n "${mrows[$msel]:-}" ] || return 0
   split_mrow "${mrows[$msel]}"
   local url="https://github.com/$m_name"
   if [ "$dry_run" = 1 ]; then
@@ -566,21 +689,15 @@ while true; do
   msg=""
   if [ "$view" = market ]; then
     case "$key" in
-      j|down)
-        if [ ${#mrows[@]} -gt 0 ]; then
-          # Walking off the loaded bottom pulls the next page in; once
-          # everything is loaded, wrap around as usual.
-          if [ "$msel" -eq $(( ${#mrows[@]} - 1 )) ] && [ "$m_more" = 1 ]; then
-            fetch_market $(( mpage + 1 ))
-            [ "$msel" -lt $(( ${#mrows[@]} - 1 )) ] && msel=$(( msel + 1 ))
-          else
-            msel=$(( (msel + 1) % ${#mrows[@]} ))
-          fi
-        fi ;;
-      k|up)   [ ${#mrows[@]} -gt 0 ] && msel=$(( (msel - 1 + ${#mrows[@]}) % ${#mrows[@]} )) ;;
+      j|down) goto_idx $(( msel + 1 )) || true ;;
+      k|up)   goto_idx $(( msel - 1 )) || true ;;
+      right|l|L) goto_page $(( mpg + 1 )) || true ;;
+      left|h|H)  goto_page $(( mpg - 1 )) || true ;;
       enter|i|I) m_install ;;
       o|O) m_open_repo ;;
-      r|R) msel=0; fetch_market 1 ;;
+      /) m_search ;;
+      s|S) m_sort_toggle ;;
+      r|R) market_reset; fetch_market_page 1 || true ;;
       m|M|q|Q) view=main ;;
       *) continue ;;
     esac
@@ -594,7 +711,7 @@ while true; do
       x|X) do_uninstall ;;
       o|O) do_open_repo ;;
       c|C) do_plugins_json ;;
-      m|M) view=market; [ "$market_loaded" != 1 ] && fetch_market 1 ;;
+      m|M) view=market; [ "$market_loaded" != 1 ] && { market_reset; fetch_market_page 1 || true; } ;;
       r|R) load_plugins; run_update_checks; msg="${dim}refreshed${reset}" ;;
       q|Q) exit 0 ;;
       *) continue ;;

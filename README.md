@@ -61,17 +61,20 @@ popup을 열면 목록이 즉시 그려지고, 곧이어(≈0.5초) 각 GitHub �
 
 ![marketplace view — community plugins sorted by stars](assets/market.png)
 
-[herdr.dev/plugins](https://herdr.dev/plugins/)와 같은 인덱스 — GitHub에서 `herdr-plugin` topic이 붙은 공개 저장소를 별점순으로 보여준다 (herdr.dev 페이지 자체가 이 topic의 자동 인덱스라서, 원본인 GitHub Search API를 직접 조회한다). 처음엔 상위 50개만 가져오고, **목록 맨 아래에서 `↓`를 누르면 다음 50개를 이어서 로드**한다 (검색 API 상한인 1000개까지). 하단 순번은 `현재/전체`로 표시된다.
+[herdr.dev/plugins](https://herdr.dev/plugins/)와 같은 인덱스 — GitHub에서 `herdr-plugin` topic이 붙은 공개 저장소를 보여준다 (herdr.dev 페이지 자체가 이 topic의 자동 인덱스라서, 원본인 GitHub Search API를 직접 조회한다). 10개씩 페이지로 나뉘고 하단에 `‹ 1 … 4 [5] 6 … 29 ›` 페이지 바가 표시된다. 데이터는 API에서 50개 단위로 필요한 페이지만 가져온다 (검색 API 상한 1000개).
 
 | 키 | 동작 |
 |----|------|
-| `j` / `k` / `↑` / `↓` | 이동 (하단에 설명과 순번 표시 · 맨 아래에서 `↓` = 다음 페이지 로드) |
+| `j` / `k` / `↑` / `↓` | 항목 이동 (페이지 경계를 넘으면 자동으로 다음/이전 페이지) |
+| `←` / `→` (또는 `h` / `l`) | **페이지 넘기기** (끝에서 wrap) |
+| `/` | **검색** — 입력한 단어로 GitHub API에 재질의 (`topic:herdr-plugin + 검색어`). 로드된 목록만 거르는 게 아니라 topic 전체의 이름·설명·README를 검색한다. 빈 입력 = 전체 목록으로 복귀 |
+| `s` | **정렬 토글** — 별점순(stars) ↔ 최근 업데이트순(updated) |
 | `Enter` | **선택한 플러그인 바로 설치** (`herdr plugin install owner/repo --yes`). 이미 설치된 항목(`✓`)은 안내만 표시 |
 | `o` | 해당 repo를 브라우저로 열기 |
-| `r` | 처음부터 다시 가져오기 |
+| `r` | 현재 검색·정렬 기준으로 처음부터 다시 가져오기 |
 | `q` / `Esc` / `m` | 설치된 플러그인 목록으로 돌아가기 |
 
-네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고 `r`로 재시도할 수 있다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 메인 뷰의 `i`로 `owner/repo/subdir`를 직접 입력하면 된다.
+현재 검색어와 정렬 기준은 헤더에 표시된다 (예: `"viewer" · by updated`). 네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고, 커서와 로드된 목록은 그대로 유지된다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 메인 뷰의 `i`로 `owner/repo/subdir`를 직접 입력하면 된다.
 
 ## Dry-run 모드
 
@@ -158,7 +161,9 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 
 ### Marketplace (`m`)
 
-The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, sorted by stars, queried straight from the GitHub Search API. The first 50 load up front; pressing `↓` at the bottom of the list lazily fetches the next 50 (up to the API's 1000-result cap), with the position shown as `current/total`. Move with `j`/`k`/arrows, press **Enter to install the selection** (`herdr plugin install owner/repo --yes`; already-installed repos show a `✓`), `o` to open the repo in your browser, `r` to re-fetch from the start, `q` to go back.
+The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, queried straight from the GitHub Search API. Results are browsed in pages of 10 with a `‹ 1 … 4 [5] 6 … 29 ›` page bar at the bottom; the API is fetched 50 at a time, only for the pages you actually visit (up to the search API's 1000-result cap).
+
+`j`/`k` move (crossing a page boundary flips automatically) · `←`/`→` (or `h`/`l`) flip pages, wrapping at the ends · `/` **searches** by re-querying the API (`topic:herdr-plugin + your terms` — matches name/description/readme across the whole topic, not just loaded rows; empty input returns to the full listing) · `s` toggles the sort between most-starred and most-recently-updated · **Enter installs the selection** (`herdr plugin install owner/repo --yes`; already-installed repos show a `✓`) · `o` opens the repo in your browser · `r` re-fetches with the current query/sort · `q` goes back. The active query and sort are shown in the header; a failed fetch keeps the cursor and loaded list intact.
 
 ### Dry-run mode
 
