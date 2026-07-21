@@ -61,6 +61,25 @@ yellow="$(tput setaf 3 2>/dev/null || true)"
 cyan="$(tput setaf 6 2>/dev/null || true)"
 reset="$(tput sgr0 2>/dev/null || true)"
 
+# Like herdr's switch_ascii_input_source_in_prefix: when the popup opens on a
+# non-ASCII input source (e.g. Korean IME), hop to the last-used ASCII layout so
+# the single-key TUI works immediately, and restore the original source when the
+# popup closes. macOS only; disable with HERDR_PM_ASCII_INPUT=0.
+#
+# Both helpers run detached (nohup, stdio off the pty) — the switch so it never
+# delays the first paint, and the restore as a watchdog on this process's pid,
+# because no trap fires reliably for every way a popup can die (bash holds
+# trapped signals while blocked in the command-substitution read, and SIGKILL
+# reaches nothing at all).
+start_ascii_input() {
+  [ "${HERDR_PM_ASCII_INPUT:-1}" = 1 ] || return 0
+  [ "$(uname)" = Darwin ] && command -v osascript >/dev/null 2>&1 || return 0
+  ( nohup osascript -l JavaScript "$root/bin/input_source.js" switch-ascii \
+      > "$tmpdir/prev-input" 2>/dev/null < /dev/null & ) 2>/dev/null
+  ( nohup bash "$root/bin/restore_watchdog.sh" "$$" "$tmpdir/prev-input" \
+      "$root/bin/input_source.js" >/dev/null 2>&1 < /dev/null & ) 2>/dev/null
+}
+
 cleanup() { printf '\033[?25h'; rm -rf "$tmpdir" 2>/dev/null || true; }
 trap cleanup EXIT
 
@@ -679,6 +698,7 @@ if [ "${1:-}" = "--self-test" ]; then
   exit 0
 fi
 
+start_ascii_input
 load_plugins
 draw                 # paint the list immediately …
 run_update_checks    # … then block ~0.5s resolving update status …

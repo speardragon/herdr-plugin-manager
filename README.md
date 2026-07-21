@@ -57,6 +57,10 @@ description = "open plugin manager"
 
 popup을 열면 목록이 즉시 그려지고, 곧이어(≈0.5초) 각 GitHub 플러그인의 설치 커밋 sha를 `git ls-remote`로 원격 최신 커밋과 비교해 표시등을 초록/노랑으로 확정한다. 로컬 링크(`herdr plugin link`) 플러그인은 업데이트 확인과 `u` 대상에서 제외된다 — 로컬 checkout에서 직접 갱신하면 된다.
 
+### 자동 영문 전환 (macOS)
+
+herdr의 `switch_ascii_input_source_in_prefix` 옵션처럼, **popup이 열릴 때 입력소스가 한글 등 비-ASCII IME면 자동으로 영문 자판으로 전환**해 단일 키 조작이 바로 먹게 하고, **popup이 닫히면 원래 입력소스로 복원**한다. macOS의 Text Input Source API를 osascript(JXA)로 호출하므로 별도 설치가 필요 없다. 복원은 popup 프로세스를 감시하는 분리된 watchdog이 수행해서 `q`/`Esc`는 물론 pane이 강제로 닫혀도 동작한다. 끄려면 `HERDR_PM_ASCII_INPUT=0`을 popup 환경변수로 넘기면 된다.
+
 ## 마켓플레이스 (`m`)
 
 ![marketplace view — community plugins sorted by stars](assets/market.png)
@@ -158,6 +162,8 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 | `q` / `Esc` | Close |
 
 **Indicators:** 🟢 `●` enabled & up to date · 🟡 `●` `↑ update` — a newer commit exists on the GitHub source (press `u`) · ⚪ `○` disabled. The list paints instantly; update status settles ~0.5s later by comparing each plugin's pinned sha against the remote via `git ls-remote`. Locally linked plugins are excluded from update checks.
+
+**Auto ASCII input (macOS):** like herdr's `switch_ascii_input_source_in_prefix`, opening the popup on a non-ASCII input source (e.g. a Korean IME) switches to your last-used ASCII layout so the single-key TUI works immediately, and the original source is restored when the popup closes — by a detached watchdog, so it works even if the pane is force-closed. Uses the Text Input Source API via osascript (JXA), no extra installs. Disable with `HERDR_PM_ASCII_INPUT=0`.
 
 ### Marketplace (`m`)
 
