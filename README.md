@@ -1,0 +1,182 @@
+# herdr-plugin-manager
+
+![herdr 0.7.4+](https://img.shields.io/badge/herdr-0.7.4%2B-8a2be2)
+![platform: macOS / Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational)
+![zero JS dependencies](https://img.shields.io/badge/deps-zero-brightgreen)
+
+![herdr Plugin Manager popup showing installed plugins with update indicators](assets/updates.png)
+
+🇰🇷 한국어 | [🇺🇸 English](#english)
+
+**[herdr](https://herdr.dev) 플러그인을 popup 하나로 관리하는 플러그인.** 모든 pane에 에이전트를 띄워두고 일할 때, 플러그인 하나 설치하자고 새 탭을 열고 `herdr plugin ...` 명령어를 기억해낼 필요가 없다 — 키 한 번이면 popup이 뜨고, 거기서 설치·업데이트·삭제·enable/disable·마켓플레이스 탐색까지 전부 끝난다.
+
+내부적으로는 전부 `herdr plugin` CLI를 그대로 호출하는 얇은 TUI다 (bash + python3, 외부 의존성 없음).
+
+## 빠른 시작
+
+```bash
+herdr plugin install speardragon/herdr-plugin-manager
+```
+
+herdr 설정(`~/.config/herdr/config.toml`)에 키바인딩 추가 — **추천 키는 `prefix+p`** (**p**lugin):
+
+```toml
+[[keys.command]]
+key = "prefix+p"
+type = "plugin_action"
+command = "ray.plugin-manager.open"
+description = "open plugin manager"
+```
+
+`herdr server reload-config` 실행 후 아무 pane에서나 `prefix+p`를 누르면 popup이 뜬다.
+
+## 키
+
+![main view — installed plugin list](assets/main.png)
+
+| 키 | 동작 |
+|----|------|
+| `j` / `k` / `↑` / `↓` | 플러그인 선택 이동 (선택된 플러그인의 id·source·sha가 하단에 표시) |
+| `i` | 설치 — `owner/repo[/subdir]` 입력, 이어서 git ref 입력(Enter = 기본 브랜치). `--yes`로 비대화형 설치 |
+| `u` | 업데이트 — 선택한 플러그인을 최신으로. herdr에 update 명령은 없고 설치본이 커밋 sha에 고정되므로, 같은 spec으로 `install`을 재실행하는 방식 |
+| `e` | enable ↔ disable 토글 |
+| `x` | 삭제 — `y/N` 확인 후 uninstall (로컬 링크 플러그인이면 unlink) |
+| `o` | 선택한 플러그인의 GitHub repo를 브라우저로 열기 (subdir 플러그인은 설치된 커밋의 해당 subdir로 이동) |
+| `c` | 전역 플러그인 레지스트리 `~/.config/herdr/plugins.json`을 VS Code로 열기 (`code` CLI 필요) |
+| `m` | **마켓플레이스** — 커뮤니티 플러그인 탐색 (아래 참조) |
+| `r` | 목록 새로고침 (업데이트 재확인 포함) |
+| `q` / `Esc` | 닫기 |
+
+### 표시등 (● / ○)
+
+| 표시 | 의미 |
+|------|------|
+| 🟢 `●` | enabled · 최신 상태 |
+| 🟡 `●` `↑ update` | enabled · GitHub 원본에 더 새 커밋이 있음 → `u`로 업데이트 |
+| ⚪ `○` `(disabled)` | disabled |
+
+popup을 열면 목록이 즉시 그려지고, 곧이어(≈0.5초) 각 GitHub 플러그인의 설치 커밋 sha를 `git ls-remote`로 원격 최신 커밋과 비교해 표시등을 초록/노랑으로 확정한다. 로컬 링크(`herdr plugin link`) 플러그인은 업데이트 확인과 `u` 대상에서 제외된다 — 로컬 checkout에서 직접 갱신하면 된다.
+
+## 마켓플레이스 (`m`)
+
+![marketplace view — community plugins sorted by stars](assets/market.png)
+
+[herdr.dev/plugins](https://herdr.dev/plugins/)와 같은 인덱스 — GitHub에서 `herdr-plugin` topic이 붙은 공개 저장소를 별점순 상위 50개까지 보여준다 (herdr.dev 페이지 자체가 이 topic의 자동 인덱스라서, 원본인 GitHub Search API를 직접 조회한다).
+
+| 키 | 동작 |
+|----|------|
+| `j` / `k` / `↑` / `↓` | 이동 (하단에 설명과 순번 표시) |
+| `Enter` | **선택한 플러그인 바로 설치** (`herdr plugin install owner/repo --yes`). 이미 설치된 항목(`✓`)은 안내만 표시 |
+| `o` | 해당 repo를 브라우저로 열기 |
+| `r` | 목록 다시 가져오기 |
+| `q` / `Esc` / `m` | 설치된 플러그인 목록으로 돌아가기 |
+
+네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고 `r`로 재시도할 수 있다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 메인 뷰의 `i`로 `owner/repo/subdir`를 직접 입력하면 된다.
+
+## Dry-run 모드
+
+실제 명령을 실행하지 않고 어떤 명령이 실행될지만 보여주는 모드. 검증·데모용.
+
+```bash
+herdr plugin pane open --plugin ray.plugin-manager --entrypoint manager \
+  --placement popup --focus --env HERDR_PM_DRY_RUN=1
+```
+
+install / update / uninstall / enable / disable / repo 열기 / plugins.json 열기가 전부 `[dry-run] ...` 출력으로 대체된다. 목록 조회·업데이트 확인 같은 읽기 동작은 그대로 실행된다.
+
+## 요구 사항
+
+- herdr 0.7.4+
+- `python3` (macOS 기본 포함 — JSON 파싱에만 사용)
+- `git` (선택 — 업데이트 표시등용. 없으면 표시등만 생략)
+- `curl` (macOS 기본 포함 — 마켓플레이스 조회용)
+- 브라우저 오프너 (`o` 키용 — macOS `open` / Linux `xdg-open`)
+- `code` CLI (선택 — `c` 키용. VS Code에서 "Shell Command: Install 'code' command" 실행)
+
+## 개발
+
+```bash
+herdr plugin link /path/to/herdr-plugin-manager   # 로컬 개발용 링크
+herdr plugin action invoke ray.plugin-manager.open
+```
+
+TUI 로직은 herdr popup 없이도 PTY에서 직접 테스트할 수 있다:
+
+```bash
+HERDR_PM_DRY_RUN=1 bash bin/manager.sh
+```
+
+### 구조
+
+- `herdr-plugin.toml` — popup pane(`manager`) + workspace action(`open`) 선언
+- `bin/manager.sh` — TUI 본체 (bash 3.2 호환 · 설치 목록/마켓플레이스 2개 뷰 · 버퍼 단일 출력 방식의 flicker-free 렌더링)
+- `bin/parse_list.py` — `herdr plugin list --json` → 탭 구분 행 변환
+- `bin/parse_market.py` — GitHub Search API 응답 → 탭 구분 행 변환
+
+---
+
+## English
+
+**Manage [herdr](https://herdr.dev) plugins from a single popup.** When every pane is running an AI agent, you shouldn't have to open a new tab and remember `herdr plugin ...` incantations just to install something — one keypress opens a popup where you install, update, remove, toggle, and browse the marketplace.
+
+Under the hood it's a thin TUI over the `herdr plugin` CLI (bash + python3, zero external dependencies).
+
+### Quick start
+
+```bash
+herdr plugin install speardragon/herdr-plugin-manager
+```
+
+Add a keybinding to `~/.config/herdr/config.toml` — the **recommended key is `prefix+p`** (**p**lugin):
+
+```toml
+[[keys.command]]
+key = "prefix+p"
+type = "plugin_action"
+command = "ray.plugin-manager.open"
+description = "open plugin manager"
+```
+
+Run `herdr server reload-config`, then press `prefix+p` in any pane.
+
+### Keys
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` / `↑` / `↓` | Move selection (id · source · pinned sha shown below the list) |
+| `i` | Install — type `owner/repo[/subdir]`, then an optional git ref (Enter = default branch); runs non-interactively with `--yes` |
+| `u` | Update the selected plugin — herdr has no update command; installs are pinned to a commit sha, so re-running `install` with the same spec moves the pin to latest |
+| `e` | Toggle enable ↔ disable |
+| `x` | Uninstall after a `y/N` confirm (locally linked plugins are unlinked instead) |
+| `o` | Open the plugin's GitHub repo in your browser (subdir plugins open the subdir at the installed commit) |
+| `c` | Open the global plugin registry `~/.config/herdr/plugins.json` in VS Code (needs the `code` CLI) |
+| `m` | **Marketplace** — browse community plugins (below) |
+| `r` | Refresh the list (re-checks updates) |
+| `q` / `Esc` | Close |
+
+**Indicators:** 🟢 `●` enabled & up to date · 🟡 `●` `↑ update` — a newer commit exists on the GitHub source (press `u`) · ⚪ `○` disabled. The list paints instantly; update status settles ~0.5s later by comparing each plugin's pinned sha against the remote via `git ls-remote`. Locally linked plugins are excluded from update checks.
+
+### Marketplace (`m`)
+
+The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, top 50 by stars, queried straight from the GitHub Search API. Move with `j`/`k`/arrows, press **Enter to install the selection** (`herdr plugin install owner/repo --yes`; already-installed repos show a `✓`), `o` to open the repo in your browser, `r` to re-fetch, `q` to go back.
+
+### Dry-run mode
+
+```bash
+herdr plugin pane open --plugin ray.plugin-manager --entrypoint manager \
+  --placement popup --focus --env HERDR_PM_DRY_RUN=1
+```
+
+Every mutating action prints the exact command instead of running it; read-only actions still work.
+
+### Requirements
+
+herdr 0.7.4+ · `python3` (JSON parsing) · `git` (optional, update indicators) · `curl` (marketplace) · `open`/`xdg-open` (the `o` key) · `code` CLI (optional, the `c` key).
+
+### Development
+
+```bash
+herdr plugin link /path/to/herdr-plugin-manager
+herdr plugin action invoke ray.plugin-manager.open
+HERDR_PM_DRY_RUN=1 bash bin/manager.sh   # test the TUI in any terminal, no popup needed
+```
