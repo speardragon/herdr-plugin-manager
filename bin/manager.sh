@@ -59,7 +59,6 @@ red="$(tput setaf 1 2>/dev/null || true)"
 green="$(tput setaf 2 2>/dev/null || true)"
 yellow="$(tput setaf 3 2>/dev/null || true)"
 cyan="$(tput setaf 6 2>/dev/null || true)"
-rev="$(tput rev 2>/dev/null || true)"
 reset="$(tput sgr0 2>/dev/null || true)"
 
 # Like herdr's switch_ascii_input_source_in_prefix: when the popup opens on a
@@ -194,7 +193,7 @@ draw_flush() {
 
 draw() {
   buf=""
-  put '  %b herdr Plugin Manager %b' "$bold$rev" "$reset"
+  put '  %bherdr Plugin Manager%b' "$bold" "$reset"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
@@ -597,8 +596,8 @@ draw_market() {
   total="$(display_total)"
   label="topic:herdr-plugin"
   [ -n "$m_query" ] && label="\"$m_query\""
-  put '  %b herdr marketplace %b  %b%s · by %s%b' \
-    "$bold$rev" "$reset" "$dim" "$label" "$m_sort" "$reset"
+  put '  %bherdr marketplace%b  %b%s · by %s%b' \
+    "$bold$cyan" "$reset" "$dim" "$label" "$m_sort" "$reset"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
