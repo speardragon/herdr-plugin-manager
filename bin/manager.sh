@@ -59,6 +59,7 @@ red="$(tput setaf 1 2>/dev/null || true)"
 green="$(tput setaf 2 2>/dev/null || true)"
 yellow="$(tput setaf 3 2>/dev/null || true)"
 cyan="$(tput setaf 6 2>/dev/null || true)"
+rev="$(tput rev 2>/dev/null || true)"
 reset="$(tput sgr0 2>/dev/null || true)"
 
 # Like herdr's switch_ascii_input_source_in_prefix: when the popup opens on a
@@ -193,7 +194,7 @@ draw_flush() {
 
 draw() {
   buf=""
-  put '  %bherdr Plugin Manager%b' "$bold" "$reset"
+  put '  %b herdr Plugin Manager %b' "$bold$rev" "$reset"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
@@ -596,8 +597,8 @@ draw_market() {
   total="$(display_total)"
   label="topic:herdr-plugin"
   [ -n "$m_query" ] && label="\"$m_query\""
-  put '  %bherdr marketplace%b  %b%s · by %s%b' \
-    "$bold" "$reset" "$dim" "$label" "$m_sort" "$reset"
+  put '  %b herdr marketplace %b  %b%s · by %s%b' \
+    "$bold$rev" "$reset" "$dim" "$label" "$m_sort" "$reset"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
@@ -674,7 +675,14 @@ m_install() {
     msg="${green}$m_name is already installed${reset} — update it from the main list (u)"
     return
   fi
-  run_mut plugin install "$m_name" --yes
+  printf '\n  %binstall %b%s%b (★ %s)? [y/N]%b ' \
+    "$bold" "$cyan" "$m_name" "$reset$bold" "$m_stars" "$reset"
+  local k=""
+  IFS= read -rsn1 k || true
+  case "$k" in
+    y|Y) run_mut plugin install "$m_name" --yes ;;
+    *) msg="${dim}install cancelled${reset}" ;;
+  esac
 }
 
 m_open_repo() {
