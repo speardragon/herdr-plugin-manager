@@ -153,6 +153,32 @@ action_count() {
   printf '%s' "$n"
 }
 
+# Keybindings for plugin actions from herdr's config.toml ([[keys.command]]
+# entries with type = "plugin_action"), as "full_action_id \t key" rows.
+keymap=()
+herdr_config="$(dirname "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}")/config.toml"
+
+load_keymap() {
+  local line
+  keymap=()
+  [ -f "$herdr_config" ] || return 0
+  while IFS= read -r line; do
+    [ -n "$line" ] && keymap+=("$line")
+  done < <(python3 "$root/bin/parse_keys.py" "$herdr_config" 2>/dev/null)
+}
+
+# Echoes the key(s) bound to a full action id ("prefix+p", comma-joined when
+# bound more than once), or nothing when unbound.
+action_key() {
+  local k out=""
+  if [ ${#keymap[@]} -gt 0 ]; then
+    for k in "${keymap[@]}"; do
+      case "$k" in "$1"$'\t'*) out="${out:+$out,}${k#*$'\t'}" ;; esac
+    done
+  fi
+  printf '%s' "$out"
+}
+
 load_plugins() {
   local json line
   json="$("$herdr" plugin list --json 2>/dev/null)" || json=""
@@ -167,6 +193,7 @@ load_plugins() {
       esac
     done < <(printf '%s' "$json" | python3 "$root/bin/parse_list.py" 2>/dev/null)
   fi
+  load_keymap
   build_flat
 }
 
@@ -302,8 +329,11 @@ draw() {
           ;;
         a:*)
           split_act "${acts[${ent#a:}]}"
-          put '  %b   %b↳%b %b%-14.14s%b %b%-34.34s%b\n' \
-            "$cursor" "$dim" "$reset" "$pre" "$a_aid" "$post" "$dim" "$a_title" "$reset"
+          local akey
+          akey="$(action_key "$a_pid.$a_aid")"
+          put '  %b   %b↳%b %b%-14.14s%b %b%-26.26s%b %b%s%b\n' \
+            "$cursor" "$dim" "$reset" "$pre" "$a_aid" "$post" "$dim" "$a_title" "$reset" \
+            "$yellow" "$akey" "$reset"
           ;;
       esac
       i=$(( i + 1 ))
@@ -314,12 +344,17 @@ draw() {
     case "$ent" in
       a:*)
         split_act "${acts[${ent#a:}]}"
+        local akey c1="${a_cmd:0:56}"
+        akey="$(action_key "$a_pid.$a_aid")"
+        [ ${#a_cmd} -gt 56 ] && c1="${a_cmd:0:55}…"
         put '  %baction%b  %s.%s\n' "$dim" "$reset" "$a_pid" "$a_aid"
-        local c1="${a_cmd:0:56}" c2=""
-        [ ${#a_cmd} -gt 56 ] && c2="${a_cmd:56:55}"
-        [ ${#a_cmd} -gt 111 ] && c2="${c2:0:54}…"
+        if [ -n "$akey" ]; then
+          put '  %bkey%b     %b%s%b\n' "$dim" "$reset" "$yellow" "$akey" "$reset"
+        else
+          put '  %bkey%b     %b— not bound (add [[keys.command]] in config.toml)%b\n' \
+            "$dim" "$reset" "$dim" "$reset"
+        fi
         put '  %bcmd%b     %s\n' "$dim" "$reset" "$c1"
-        [ -n "$c2" ] && put '          %s\n' "$c2"
         ;;
       p:*)
         split_row "${rows[${ent#p:}]}"

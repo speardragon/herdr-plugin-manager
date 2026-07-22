@@ -50,16 +50,21 @@ description = "open plugin manager"
 
 ### 액션 아코디언 (`Enter`)
 
-액션을 선언한 플러그인은 행 끝에 `›` 표시가 붙는다. `Enter`로 펼치면 액션들이 `↳ id — 제목` 형태로 아래에 나열되고, 액션 행에서 다시 `Enter`를 누르면 `herdr plugin action invoke <plugin>.<action>`으로 **즉시 실행**된다 (키바인딩으로 호출하는 것과 동일한 경로). 액션 행을 선택하면 하단 상세에 그 액션이 **어떤 커맨드로 설정돼 있는지**(`herdr-plugin.toml`의 command) 표시된다.
+액션을 선언한 플러그인은 행 끝에 `›` 표시가 붙는다. `Enter`로 펼치면 액션들이 `↳ id — 제목` 형태로 아래에 나열되고, 액션 행에서 다시 `Enter`를 누르면 `herdr plugin action invoke <plugin>.<action>`으로 **즉시 실행**된다 (키바인딩으로 호출하는 것과 동일한 경로).
+
+액션 행에는 herdr 설정(`config.toml`의 `[[keys.command]]`)에 **바인딩된 단축키**(`prefix+p` 등)가 함께 표시되고, 하단 상세에는 바인딩 여부와 그 액션이 실행하는 커맨드까지 보인다:
 
 ```
-  ▸ ● Space Stats              0.1.0    ⌄
-       ↳ sync           Sync all Space stats
-    ● File Explorer            0.2.0    ›
+  ▸ ● Plugin Manager           0.1.0    ⌄
+       ↳ open           Open plugin manager        prefix+p
+    ● Space Stats              0.1.0    ›
   ──────────────────────────────────────────
-  action  dev.minung.space-stats.sync
-  cmd     node src/sync.mjs
+  action  ray.plugin-manager.open
+  key     prefix+p
+  cmd     bash -c exec "${HERDR_BIN_PATH:-herdr}" plugin pane ope…
 ```
+
+바인딩이 없는 액션은 `key — not bound`로 표시된다 — 자주 쓰는 액션이면 config.toml에 키를 달라는 신호다.
 
 ### 표시등 (● / ○)
 
@@ -165,7 +170,7 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 | Key | Action |
 |-----|--------|
 | `j` / `k` / `↑` / `↓` | Move selection (details of the selected item shown below the list) |
-| `Enter` | On a **plugin row**: fold/unfold its declared actions (accordion, `›`/`⌄`) · on an **action row**: run that action immediately via `herdr plugin action invoke`; the detail pane shows the command the action is configured to run |
+| `Enter` | On a **plugin row**: fold/unfold its declared actions (accordion, `›`/`⌄`) · on an **action row**: run that action immediately via `herdr plugin action invoke`. Action rows show the key bound to them in your herdr config (e.g. `prefix+p`), and the detail pane shows the binding plus the command the action runs |
 | `i` | Install — type `owner/repo[/subdir]`, then an optional git ref (Enter = default branch); runs non-interactively with `--yes` |
 | `u` | Update the selected plugin — herdr has no update command; installs are pinned to a commit sha, so re-running `install` with the same spec moves the pin to latest |
 | `e` | Toggle enable ↔ disable |
