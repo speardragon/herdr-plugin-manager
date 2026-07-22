@@ -36,7 +36,8 @@ description = "open plugin manager"
 
 | 키 | 동작 |
 |----|------|
-| `j` / `k` / `↑` / `↓` | 플러그인 선택 이동 (선택된 플러그인의 id·source·sha가 하단에 표시) |
+| `j` / `k` / `↑` / `↓` | 이동 (선택된 항목의 상세가 하단에 표시) |
+| `Enter` | **플러그인 행**: 액션 목록 펼치기/접기 (아코디언, `›`/`⌄` 표시) · **액션 행**: 그 액션 즉시 실행 |
 | `i` | 설치 — `owner/repo[/subdir]` 입력, 이어서 git ref 입력(Enter = 기본 브랜치). `--yes`로 비대화형 설치 |
 | `u` | 업데이트 — 선택한 플러그인을 최신으로. herdr에 update 명령은 없고 설치본이 커밋 sha에 고정되므로, 같은 spec으로 `install`을 재실행하는 방식 |
 | `e` | enable ↔ disable 토글 |
@@ -46,6 +47,19 @@ description = "open plugin manager"
 | `m` | **마켓플레이스** — 커뮤니티 플러그인 탐색 (아래 참조) |
 | `r` | 목록 새로고침 (업데이트 재확인 포함) |
 | `q` / `Esc` | 닫기 |
+
+### 액션 아코디언 (`Enter`)
+
+액션을 선언한 플러그인은 행 끝에 `›` 표시가 붙는다. `Enter`로 펼치면 액션들이 `↳ id — 제목` 형태로 아래에 나열되고, 액션 행에서 다시 `Enter`를 누르면 `herdr plugin action invoke <plugin>.<action>`으로 **즉시 실행**된다 (키바인딩으로 호출하는 것과 동일한 경로). 액션 행을 선택하면 하단 상세에 그 액션이 **어떤 커맨드로 설정돼 있는지**(`herdr-plugin.toml`의 command) 표시된다.
+
+```
+  ▸ ● Space Stats              0.1.0    ⌄
+       ↳ sync           Sync all Space stats
+    ● File Explorer            0.2.0    ›
+  ──────────────────────────────────────────
+  action  dev.minung.space-stats.sync
+  cmd     node src/sync.mjs
+```
 
 ### 표시등 (● / ○)
 
@@ -150,7 +164,8 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` / `↑` / `↓` | Move selection (id · source · pinned sha shown below the list) |
+| `j` / `k` / `↑` / `↓` | Move selection (details of the selected item shown below the list) |
+| `Enter` | On a **plugin row**: fold/unfold its declared actions (accordion, `›`/`⌄`) · on an **action row**: run that action immediately via `herdr plugin action invoke`; the detail pane shows the command the action is configured to run |
 | `i` | Install — type `owner/repo[/subdir]`, then an optional git ref (Enter = default branch); runs non-interactively with `--yes` |
 | `u` | Update the selected plugin — herdr has no update command; installs are pinned to a commit sha, so re-running `install` with the same spec moves the pin to latest |
 | `e` | Toggle enable ↔ disable |

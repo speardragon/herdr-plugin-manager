@@ -25,8 +25,11 @@ root="${HERDR_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 dry_run="${HERDR_PM_DRY_RUN:-0}"
 plugins_json="$(dirname "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}")/plugins.json"
 
-rows=()
-sel=0
+rows=()      # plugin rows (TSV from parse_list.py)
+acts=()      # action rows: plugin_id \t action_id \t title \t command
+flat=()      # display order: "p:<rows idx>" plus "a:<acts idx>" under expanded plugins
+expanded=" " # " plugin_id plugin_id " — accordion state, survives reloads
+sel=0        # index into flat
 msg=""
 checked=0
 
@@ -93,18 +96,78 @@ split_row() {
   read -r r_id r_name r_ver r_en r_kind r_spec r_commit r_slug r_ref r_full <<< "$1"
 }
 
+# Sets a_pid a_aid a_title a_cmd from one action row.
+split_act() {
+  local IFS=$'\t'
+  read -r a_pid a_aid a_title a_cmd <<< "$1"
+}
+
+# Rebuilds the display order: every plugin row, with its action rows inlined
+# beneath it while that plugin id is in $expanded.
+build_flat() {
+  flat=()
+  local i j
+  [ ${#rows[@]} -gt 0 ] || { sel=0; return 0; }
+  for i in "${!rows[@]}"; do
+    flat+=("p:$i")
+    split_row "${rows[$i]}"
+    case "$expanded" in
+      *" $r_id "*)
+        if [ ${#acts[@]} -gt 0 ]; then
+          for j in "${!acts[@]}"; do
+            case "${acts[$j]}" in "$r_id"$'\t'*) flat+=("a:$j") ;; esac
+          done
+        fi
+        ;;
+    esac
+  done
+  local last=$(( ${#flat[@]} - 1 ))
+  [ "$sel" -gt "$last" ] && sel=$last
+  [ "$sel" -lt 0 ] && sel=0
+}
+
+# Resolves the current selection to its plugin: sets r_* directly for a plugin
+# row, or to the parent plugin for an action row.
+select_plugin_row() {
+  [ ${#flat[@]} -gt 0 ] || return 1
+  local ent="${flat[$sel]}" line
+  case "$ent" in
+    p:*) split_row "${rows[${ent#p:}]}" ;;
+    a:*)
+      split_act "${acts[${ent#a:}]}"
+      for line in "${rows[@]}"; do
+        case "$line" in "$a_pid"$'\t'*) split_row "$line"; return 0 ;; esac
+      done
+      return 1
+      ;;
+  esac
+}
+
+action_count() {
+  local n=0 a
+  if [ ${#acts[@]} -gt 0 ]; then
+    for a in "${acts[@]}"; do
+      case "$a" in "$1"$'\t'*) n=$(( n + 1 )) ;; esac
+    done
+  fi
+  printf '%s' "$n"
+}
+
 load_plugins() {
   local json line
   json="$("$herdr" plugin list --json 2>/dev/null)" || json=""
   rows=()
+  acts=()
   if [ -n "$json" ]; then
     while IFS= read -r line; do
-      [ -n "$line" ] && rows+=("$line")
+      [ -n "$line" ] || continue
+      case "$line" in
+        '#action'$'\t'*) acts+=("${line#\#action$'\t'}") ;;
+        *) rows+=("$line") ;;
+      esac
     done < <(printf '%s' "$json" | python3 "$root/bin/parse_list.py" 2>/dev/null)
   fi
-  local last=$(( ${#rows[@]} - 1 ))
-  [ "$sel" -gt "$last" ] && sel=$last
-  [ "$sel" -lt 0 ] && sel=0
+  build_flat
 }
 
 # ── update checking ─────────────────────────────────────────────────────────
@@ -197,52 +260,85 @@ draw() {
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
-  if [ ${#rows[@]} -eq 0 ]; then
+  if [ ${#flat[@]} -eq 0 ]; then
     put '  %bno plugins installed — press i to install one%b\n' "$dim" "$reset"
   else
-    local max_vis=10 start=0 end i
+    local max_vis=8 start=0 end i ent nacts marker
     [ "$sel" -ge "$max_vis" ] && start=$(( sel - max_vis + 1 ))
     end=$(( start + max_vis - 1 ))
-    [ "$end" -ge ${#rows[@]} ] && end=$(( ${#rows[@]} - 1 ))
+    [ "$end" -ge ${#flat[@]} ] && end=$(( ${#flat[@]} - 1 ))
     i=$start
     while [ "$i" -le "$end" ]; do
-      split_row "${rows[$i]}"
-      local status dot state="" cursor="  " pre="" post=""
-      status="$(plugin_status "$r_id")"
-      if [ "$r_en" = 0 ]; then
-        dot="${dim}○${reset}"
-        state="  ${dim}(disabled)${reset}"
-      elif [ "$status" = update ]; then
-        dot="${yellow}●${reset}"
-        state="  ${yellow}↑ update${reset}"
-      else
-        dot="${green}●${reset}"
-      fi
+      ent="${flat[$i]}"
+      local cursor="  " pre="" post=""
       if [ "$i" -eq "$sel" ]; then
         cursor="${cyan}▸ ${reset}"
         pre="$bold" post="$reset"
       fi
-      put '  %b%b %b%-26.26s %-8.8s%b%b\n' \
-        "$cursor" "$dot" "$pre" "$r_name" "$r_ver" "$post" "$state"
+      case "$ent" in
+        p:*)
+          split_row "${rows[${ent#p:}]}"
+          local status dot state=""
+          status="$(plugin_status "$r_id")"
+          if [ "$r_en" = 0 ]; then
+            dot="${dim}○${reset}"
+            state="  ${dim}(disabled)${reset}"
+          elif [ "$status" = update ]; then
+            dot="${yellow}●${reset}"
+            state="  ${yellow}↑ update${reset}"
+          else
+            dot="${green}●${reset}"
+          fi
+          marker=" "
+          nacts="$(action_count "$r_id")"
+          if [ "$nacts" -gt 0 ]; then
+            case "$expanded" in
+              *" $r_id "*) marker="${dim}⌄${reset}" ;;
+              *) marker="${dim}›${reset}" ;;
+            esac
+          fi
+          put '  %b%b %b%-24.24s %-8.8s%b %b%b\n' \
+            "$cursor" "$dot" "$pre" "$r_name" "$r_ver" "$post" "$marker" "$state"
+          ;;
+        a:*)
+          split_act "${acts[${ent#a:}]}"
+          put '  %b   %b↳%b %b%-14.14s%b %b%-34.34s%b\n' \
+            "$cursor" "$dim" "$reset" "$pre" "$a_aid" "$post" "$dim" "$a_title" "$reset"
+          ;;
+      esac
       i=$(( i + 1 ))
     done
     put '\n'
-    split_row "${rows[$sel]}"
-    local src="$r_spec"
-    [ "$r_ref" != "-" ] && src="$src ($r_ref)"
-    [ "$r_kind" = local ] && src="local link"
-    [ "$r_commit" != "-" ] && src="$src @$r_commit"
     put '  %b──────────────────────────────────────────────────────────%b\n' "$dim" "$reset"
-    put '  %bid%b      %s\n' "$dim" "$reset" "$r_id"
-    put '  %bsource%b  %-60.60s\n' "$dim" "$reset" "$src"
-    [ "$(plugin_status "$r_id")" = update ] && \
-      put '  %b↑ newer commit available — press u to install it%b\n' "$yellow" "$reset"
+    ent="${flat[$sel]}"
+    case "$ent" in
+      a:*)
+        split_act "${acts[${ent#a:}]}"
+        put '  %baction%b  %s.%s\n' "$dim" "$reset" "$a_pid" "$a_aid"
+        local c1="${a_cmd:0:56}" c2=""
+        [ ${#a_cmd} -gt 56 ] && c2="${a_cmd:56:55}"
+        [ ${#a_cmd} -gt 111 ] && c2="${c2:0:54}…"
+        put '  %bcmd%b     %s\n' "$dim" "$reset" "$c1"
+        [ -n "$c2" ] && put '          %s\n' "$c2"
+        ;;
+      p:*)
+        split_row "${rows[${ent#p:}]}"
+        local src="$r_spec"
+        [ "$r_ref" != "-" ] && src="$src ($r_ref)"
+        [ "$r_kind" = local ] && src="local link"
+        [ "$r_commit" != "-" ] && src="$src @$r_commit"
+        put '  %bid%b      %s\n' "$dim" "$reset" "$r_id"
+        put '  %bsource%b  %-60.60s\n' "$dim" "$reset" "$src"
+        [ "$(plugin_status "$r_id")" = update ] && \
+          put '  %b↑ newer commit available — press u to install it%b\n' "$yellow" "$reset"
+        ;;
+    esac
   fi
 
   put '\n'
-  put '  %bj/k or ↑/↓ move · i install · u update · e enable/disable%b\n' "$dim" "$reset"
+  put '  %bj/k move · Enter expand/run action · i install · u update%b\n' "$dim" "$reset"
   put '  %bo repo in browser · c edit plugins.json · x uninstall%b\n' "$dim" "$reset"
-  put '  %bm marketplace · r refresh · q quit%b\n' "$dim" "$reset"
+  put '  %be enable/disable · m marketplace · r refresh · q quit%b\n' "$dim" "$reset"
   check_footer
   [ -n "$msg" ] && put '\n  %b\n' "$msg"
   draw_flush
@@ -304,10 +400,41 @@ run_quiet() {
   if [ $? -eq 0 ]; then
     msg="${green}✓${reset} $ok_msg"
   else
-    line="$(printf '%s\n' "$out" | grep -m1 . | cut -c1-58)"
+    line="$(printf '%s\n' "$out" | grep -m1 .)"
+    case "$line" in
+      '{'*)  # herdr CLI errors are JSON — surface just the message
+        line="$(printf '%s' "$line" | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin)["error"]["message"])
+except Exception:
+    pass' 2>/dev/null)" ;;
+    esac
+    line="$(printf '%.58s' "$line")"
     msg="${red}✗ failed${reset}${line:+ — $line}"
   fi
   load_plugins
+}
+
+# Enter on a plugin row — fold/unfold its action list.
+toggle_expand() {
+  select_plugin_row || return 0
+  if [ "$(action_count "$r_id")" -eq 0 ]; then
+    msg="${dim}'$r_name' declares no actions${reset}"
+    return
+  fi
+  case "$expanded" in
+    *" $r_id "*) expanded="${expanded/ $r_id / }" ;;
+    *) expanded="${expanded}${r_id} " ;;
+  esac
+  build_flat
+}
+
+# Enter on an action row — run it via herdr, exactly like a keybinding would.
+invoke_action() {
+  local ent="${flat[$sel]}"
+  split_act "${acts[${ent#a:}]}"
+  run_quiet "invoked $a_pid.$a_aid" plugin action invoke "$a_pid.$a_aid"
 }
 
 # Runs (or dry-run prints) a long mutating command (install/update) with output
@@ -356,8 +483,7 @@ do_install() {
 }
 
 do_update() {
-  [ ${#rows[@]} -eq 0 ] && return
-  split_row "${rows[$sel]}"
+  select_plugin_row || return 0
   if [ "$r_kind" != github ]; then
     msg="${yellow}'$r_name' is a $r_kind plugin — update it from its own checkout${reset}"
     return
@@ -367,8 +493,7 @@ do_update() {
 }
 
 do_toggle() {
-  [ ${#rows[@]} -eq 0 ] && return
-  split_row "${rows[$sel]}"
+  select_plugin_row || return 0
   if [ "$r_en" = 1 ]; then
     run_quiet "disabled $r_name" plugin disable "$r_id"
   else
@@ -377,8 +502,7 @@ do_toggle() {
 }
 
 do_uninstall() {
-  [ ${#rows[@]} -eq 0 ] && return
-  split_row "${rows[$sel]}"
+  select_plugin_row || return 0
   local verb=uninstall
   [ "$r_kind" = local ] && verb=unlink
   printf '\n  %b%s %s (%s)? [y/N]%b ' "$red" "$verb" "$r_name" "$r_id" "$reset"
@@ -425,8 +549,7 @@ do_plugins_json() {
 # o — open the selected plugin's GitHub repo in the browser (subdir plugins open
 # the subdir at the installed commit; local plugins have no remote).
 do_open_repo() {
-  [ ${#rows[@]} -eq 0 ] && return
-  split_row "${rows[$sel]}"
+  select_plugin_row || return 0
   if [ "$r_kind" != github ] || [ "$r_slug" = "-" ]; then
     msg="${yellow}'$r_name' has no GitHub repo (source: $r_kind)${reset}"
     return
@@ -734,8 +857,15 @@ while true; do
     esac
   else
     case "$key" in
-      j|down) [ ${#rows[@]} -gt 0 ] && sel=$(( (sel + 1) % ${#rows[@]} )) ;;
-      k|up)   [ ${#rows[@]} -gt 0 ] && sel=$(( (sel - 1 + ${#rows[@]}) % ${#rows[@]} )) ;;
+      j|down) [ ${#flat[@]} -gt 0 ] && sel=$(( (sel + 1) % ${#flat[@]} )) ;;
+      k|up)   [ ${#flat[@]} -gt 0 ] && sel=$(( (sel - 1 + ${#flat[@]}) % ${#flat[@]} )) ;;
+      enter)
+        [ ${#flat[@]} -gt 0 ] || continue
+        case "${flat[$sel]}" in
+          p:*) toggle_expand ;;
+          a:*) invoke_action ;;
+        esac
+        ;;
       i|I) do_install ;;
       u|U) do_update ;;
       e|E) do_toggle ;;

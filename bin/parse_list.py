@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Parse `herdr plugin list --json` (stdin) into tab-separated rows.
 
-Fields (10, tab-separated):
+Plugin rows have 10 fields:
   1 plugin_id
   2 name
   3 version
@@ -13,10 +13,17 @@ Fields (10, tab-separated):
   9 ref          install ref or "-"           (update check)
  10 full_commit  full resolved_commit or "-"  (update check)
 
+Each plugin row is followed by one line per declared action:
+  #action \t plugin_id \t action_id \t title \t command-joined
+
 Empty values become "-" so bash can split on tabs safely.
 """
 import json
 import sys
+
+
+def clean(value):
+    return str(value).replace("\t", " ").replace("\n", " ").strip() or "-"
 
 
 def row(plugin):
@@ -43,7 +50,22 @@ def row(plugin):
         ref,
         full_commit,
     ]
-    return "\t".join(str(f).replace("\t", " ") for f in fields)
+    return "\t".join(clean(f) for f in fields)
+
+
+def action_rows(plugin):
+    pid = plugin.get("plugin_id") or "?"
+    for action in plugin.get("actions") or []:
+        aid = action.get("id")
+        if not aid:
+            continue
+        yield "\t".join([
+            "#action",
+            clean(pid),
+            clean(aid),
+            clean(action.get("title") or aid),
+            clean(" ".join(action.get("command") or [])),
+        ])
 
 
 def main():
@@ -54,6 +76,8 @@ def main():
     plugins = (data.get("result") or {}).get("plugins") or []
     for plugin in plugins:
         print(row(plugin))
+        for line in action_rows(plugin):
+            print(line)
     return 0
 
 
