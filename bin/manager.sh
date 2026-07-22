@@ -465,11 +465,21 @@ toggle_expand() {
   build_flat
 }
 
-# Enter on an action row — run it via herdr, exactly like a keybinding would.
+# Enter on an action row — close the popup, THEN run the action. Invoking from
+# inside the popup fails for anything that opens UI (herdr answers ui_busy /
+# popup already open while a popup is showing), so a detached helper waits for
+# this process to die and fires the invoke against the normal workspace view.
 invoke_action() {
   local ent="${flat[$sel]}"
   split_act "${acts[${ent#a:}]}"
-  run_quiet "invoked $a_pid.$a_aid" plugin action invoke "$a_pid.$a_aid"
+  if [ "$dry_run" = 1 ]; then
+    msg="${yellow}[dry-run]${reset} close popup → $herdr plugin action invoke $a_pid.$a_aid"
+    return
+  fi
+  ( nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' -- \
+      bash "$root/bin/invoke_after_close.sh" "$$" "$herdr" "$a_pid.$a_aid" \
+      >/dev/null 2>&1 < /dev/null & ) 2>/dev/null
+  exit 0
 }
 
 # Runs (or dry-run prints) a long mutating command (install/update) with output

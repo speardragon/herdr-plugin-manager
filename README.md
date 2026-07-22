@@ -50,7 +50,7 @@ description = "open plugin manager"
 
 ### 액션 아코디언 (`Enter`)
 
-액션을 선언한 플러그인은 행 끝에 `›` 표시가 붙는다. `Enter`로 펼치면 액션들이 `↳ id — 제목` 형태로 아래에 나열되고, 액션 행에서 다시 `Enter`를 누르면 `herdr plugin action invoke <plugin>.<action>`으로 **즉시 실행**된다 (키바인딩으로 호출하는 것과 동일한 경로).
+액션을 선언한 플러그인은 행 끝에 `›` 표시가 붙는다. `Enter`로 펼치면 액션들이 `↳ id — 제목` 형태로 아래에 나열되고, 액션 행에서 다시 `Enter`를 누르면 **popup이 닫히면서 그 액션이 실행**된다 (`herdr plugin action invoke` — 키바인딩으로 호출하는 것과 동일한 경로). popup을 먼저 닫는 이유: pane/popup을 여는 액션은 popup이 떠 있는 동안 herdr가 거부하기 때문에, 분리된 헬퍼가 popup 종료를 기다렸다가 실행한다.
 
 액션 행에는 herdr 설정(`config.toml`의 `[[keys.command]]`)에 **바인딩된 단축키**(`prefix+p` 등)가 함께 표시되고, 하단 상세에는 바인딩 여부와 그 액션이 실행하는 커맨드까지 보인다:
 
