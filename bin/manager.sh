@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # herdr Plugin Manager — popup TUI over the `herdr plugin` CLI.
 #
-# Keys: j/k or ↑/↓ move · i install · u update · e enable/disable · x uninstall
+# Keys: j/k or ↑/↓ move · u update · e enable/disable · x uninstall
 #       o open repo in browser · c edit plugins.json in VS Code · m marketplace
 #       r refresh · q/Esc quit
 # Marketplace view (m): browses GitHub repos tagged `herdr-plugin` (the same
@@ -261,7 +261,7 @@ check_footer() {
   local n
   n="$(awk -F'\t' '$2=="update"{c++} END{print c+0}' "$statusfile" 2>/dev/null)"
   if [ "${n:-0}" -gt 0 ]; then
-    put '  %b↑ %s update(s) available — press u to update%b\n' "$yellow" "$n" "$reset"
+    put '  %b↑ %s update(s) available — press [u] to update%b\n' "$yellow" "$n" "$reset"
   else
     put '  %ball plugins up to date%b\n' "$dim" "$reset"
   fi
@@ -288,7 +288,7 @@ draw() {
   put '\n\n'
 
   if [ ${#flat[@]} -eq 0 ]; then
-    put '  %bno plugins installed — press i to install one%b\n' "$dim" "$reset"
+    put '  %bno plugins installed — press [m] to browse the marketplace%b\n' "$dim" "$reset"
   else
     local max_vis=8 start=0 end i ent nacts marker
     [ "$sel" -ge "$max_vis" ] && start=$(( sel - max_vis + 1 ))
@@ -329,11 +329,12 @@ draw() {
           ;;
         a:*)
           split_act "${acts[${ent#a:}]}"
-          local akey
+          local akey akey_disp=""
           akey="$(action_key "$a_pid.$a_aid")"
+          [ -n "$akey" ] && akey_disp="[$akey]"
           put '  %b   %b↳%b %b%-14.14s%b %b%-26.26s%b %b%s%b\n' \
             "$cursor" "$dim" "$reset" "$pre" "$a_aid" "$post" "$dim" "$a_title" "$reset" \
-            "$yellow" "$akey" "$reset"
+            "$yellow" "$akey_disp" "$reset"
           ;;
       esac
       i=$(( i + 1 ))
@@ -349,7 +350,7 @@ draw() {
         [ ${#a_cmd} -gt 56 ] && c1="${a_cmd:0:55}…"
         put '  %baction%b  %s.%s\n' "$dim" "$reset" "$a_pid" "$a_aid"
         if [ -n "$akey" ]; then
-          put '  %bkey%b     %b%s%b\n' "$dim" "$reset" "$yellow" "$akey" "$reset"
+          put '  %bkey%b     %b[%s]%b\n' "$dim" "$reset" "$yellow" "$akey" "$reset"
         else
           put '  %bkey%b     %b— not bound (add [[keys.command]] in config.toml)%b\n' \
             "$dim" "$reset" "$dim" "$reset"
@@ -365,15 +366,15 @@ draw() {
         put '  %bid%b      %s\n' "$dim" "$reset" "$r_id"
         put '  %bsource%b  %-60.60s\n' "$dim" "$reset" "$src"
         [ "$(plugin_status "$r_id")" = update ] && \
-          put '  %b↑ newer commit available — press u to install it%b\n' "$yellow" "$reset"
+          put '  %b↑ newer commit available — press [u] to install it%b\n' "$yellow" "$reset"
         ;;
     esac
   fi
 
   put '\n'
-  put '  %bj/k move · Enter expand/run action · i install · u update%b\n' "$dim" "$reset"
-  put '  %bo repo in browser · c edit plugins.json · x uninstall%b\n' "$dim" "$reset"
-  put '  %be enable/disable · m marketplace · r refresh · q quit%b\n' "$dim" "$reset"
+  put '  %b[j/k] move · [⏎] expand/run action · [u] update%b\n' "$dim" "$reset"
+  put '  %b[o] repo in browser · [c] edit plugins.json · [x] uninstall%b\n' "$dim" "$reset"
+  put '  %b[e] enable/disable · [m] marketplace · [r] refresh · [q] quit%b\n' "$dim" "$reset"
   check_footer
   [ -n "$msg" ] && put '\n  %b\n' "$msg"
   draw_flush
@@ -509,22 +510,6 @@ prompt_line() {
   printf '\033[?25h'
   IFS= read -e -r -p "$1" REPLY || REPLY=""
   printf '\033[?25l'
-}
-
-do_install() {
-  printf '\n'
-  prompt_line "  install owner/repo[/subdir]: "
-  local spec="$REPLY"
-  if [ -z "$spec" ]; then
-    msg="${dim}install cancelled${reset}"
-    return
-  fi
-  prompt_line "  git ref (Enter = default branch): "
-  local ref="$REPLY"
-  local args=(plugin install "$spec")
-  [ -n "$ref" ] && args+=(--ref "$ref")
-  args+=(--yes)
-  run_mut "${args[@]}"
 }
 
 do_update() {
@@ -771,9 +756,9 @@ draw_market() {
 
   if [ "$total" -eq 0 ]; then
     if [ "$market_loaded" = 1 ]; then
-      put '  %bno results — / to change the search, q to go back%b\n' "$dim" "$reset"
+      put '  %bno results — [/] to change the search, [q] to go back%b\n' "$dim" "$reset"
     else
-      put '  %bnothing loaded — press r to retry%b\n' "$dim" "$reset"
+      put '  %bnothing loaded — press [r] to retry%b\n' "$dim" "$reset"
     fi
   else
     local start=$(( mpg * MARKET_VIS )) end i
@@ -804,15 +789,15 @@ draw_market() {
       if market_installed "$m_name"; then
         put '  %b✓ already installed%b\n' "$green" "$reset"
       else
-        put '  %bEnter installs github.com/%s%b\n' "$dim" "$m_name" "$reset"
+        put '  %b[⏎] installs github.com/%s%b\n' "$dim" "$m_name" "$reset"
       fi
     fi
     put_pagebar "$total"
   fi
 
   put '\n'
-  put '  %bj/k move · ←/→ page · Enter install · o repo in browser%b\n' "$dim" "$reset"
-  put '  %b/ search · s sort · r refresh · q back%b\n' "$dim" "$reset"
+  put '  %b[j/k] move · [←/→] page · [⏎] install · [o] repo in browser%b\n' "$dim" "$reset"
+  put '  %b[/] search · [s] sort · [r] refresh · [q] back%b\n' "$dim" "$reset"
   [ -n "$msg" ] && put '\n  %b\n' "$msg"
   draw_flush
 }
@@ -839,7 +824,7 @@ m_install() {
   [ -n "${mrows[$msel]:-}" ] || return 0
   split_mrow "${mrows[$msel]}"
   if market_installed "$m_name"; then
-    msg="${green}$m_name is already installed${reset} — update it from the main list (u)"
+    msg="${green}$m_name is already installed${reset} — update it from the main list ([u])"
     return
   fi
   printf '\n  %binstall %b%s%b (★ %s)? [y/N]%b ' \
@@ -911,7 +896,6 @@ while true; do
           a:*) invoke_action ;;
         esac
         ;;
-      i|I) do_install ;;
       u|U) do_update ;;
       e|E) do_toggle ;;
       x|X) do_uninstall ;;

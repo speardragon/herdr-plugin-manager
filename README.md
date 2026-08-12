@@ -38,7 +38,6 @@ description = "open plugin manager"
 |----|------|
 | `j` / `k` / `↑` / `↓` | 이동 (선택된 항목의 상세가 하단에 표시) |
 | `Enter` | **플러그인 행**: 액션 목록 펼치기/접기 (아코디언, `›`/`⌄` 표시) · **액션 행**: 그 액션 즉시 실행 |
-| `i` | 설치 — `owner/repo[/subdir]` 입력, 이어서 git ref 입력(Enter = 기본 브랜치). `--yes`로 비대화형 설치 |
 | `u` | 업데이트 — 선택한 플러그인을 최신으로. herdr에 update 명령은 없고 설치본이 커밋 sha에 고정되므로, 같은 spec으로 `install`을 재실행하는 방식 |
 | `e` | enable ↔ disable 토글 |
 | `x` | 삭제 — `y/N` 확인 후 uninstall (로컬 링크 플러그인이면 unlink) |
@@ -97,7 +96,7 @@ herdr의 `switch_ascii_input_source_in_prefix` 옵션처럼, **popup이 열릴 �
 | `r` | 현재 검색·정렬 기준으로 처음부터 다시 가져오기 |
 | `q` / `Esc` / `m` | 설치된 플러그인 목록으로 돌아가기 |
 
-현재 검색어와 정렬 기준은 헤더에 표시된다 (예: `"viewer" · by updated`). 네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고, 커서와 로드된 목록은 그대로 유지된다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 메인 뷰의 `i`로 `owner/repo/subdir`를 직접 입력하면 된다.
+현재 검색어와 정렬 기준은 헤더에 표시된다 (예: `"viewer" · by updated`). 네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고, 커서와 로드된 목록은 그대로 유지된다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 `herdr plugin install owner/repo/subdir --yes`를 직접 실행하면 된다 (popup에는 설치 기능이 없다 — 설치는 마켓플레이스의 `Enter`를 통해서만 한다).
 
 ## Dry-run 모드
 
@@ -171,7 +170,6 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 |-----|--------|
 | `j` / `k` / `↑` / `↓` | Move selection (details of the selected item shown below the list) |
 | `Enter` | On a **plugin row**: fold/unfold its declared actions (accordion, `›`/`⌄`) · on an **action row**: run that action immediately via `herdr plugin action invoke`. Action rows show the key bound to them in your herdr config (e.g. `prefix+p`), and the detail pane shows the binding plus the command the action runs |
-| `i` | Install — type `owner/repo[/subdir]`, then an optional git ref (Enter = default branch); runs non-interactively with `--yes` |
 | `u` | Update the selected plugin — herdr has no update command; installs are pinned to a commit sha, so re-running `install` with the same spec moves the pin to latest |
 | `e` | Toggle enable ↔ disable |
 | `x` | Uninstall after a `y/N` confirm (locally linked plugins are unlinked instead) |
