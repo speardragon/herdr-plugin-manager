@@ -333,7 +333,8 @@ draw() {
       case "$ent" in
         p:*)
           split_row "${rows[${ent#p:}]}"
-          local status dot state="" uver
+          local status dot state="" uver idx
+          idx="${dim}$(printf '%2d' "$(( ${ent#p:} + 1 ))")${reset} "
           status="$(plugin_status "$r_id")"
           if [ "$r_en" = 0 ]; then
             dot="${dim}○${reset}"
@@ -357,15 +358,15 @@ draw() {
               *) marker="${dim}›${reset}" ;;
             esac
           fi
-          put '  %b%b %b%-24.24s %-8.8s%b %b%b\n' \
-            "$cursor" "$dot" "$pre" "$r_name" "$r_ver" "$post" "$marker" "$state"
+          put '%b  %b%b %b%-24.24s %-8.8s%b %b%b\n' \
+            "$idx" "$cursor" "$dot" "$pre" "$r_name" "$r_ver" "$post" "$marker" "$state"
           ;;
         a:*)
           split_act "${acts[${ent#a:}]}"
           local akey akey_disp=""
           akey="$(action_key "$a_pid.$a_aid")"
           [ -n "$akey" ] && akey_disp="[$akey]"
-          put '  %b   %b↳%b %b%-14.14s%b %b%-26.26s%b %b%s%b\n' \
+          put '     %b   %b↳%b %b%-14.14s%b %b%-26.26s%b %b%s%b\n' \
             "$cursor" "$dim" "$reset" "$pre" "$a_aid" "$post" "$dim" "$a_title" "$reset" \
             "$yellow" "$akey_disp" "$reset"
           ;;
@@ -545,10 +546,46 @@ run_mut() {
   run_update_checks
 }
 
+# Reads a line with basic editing (backspace) and Esc-to-cancel, showing the
+# cursor for the duration. Sets REPLY to the submitted text and
+# PROMPT_CANCELLED to 1 if the user pressed Esc/Ctrl-C/EOF instead of Enter
+# (callers should leave their state untouched in that case), else 0. A bare
+# Esc is disambiguated from an escape sequence (arrow keys etc.) the same way
+# read_key() does; sequence continuation bytes are swallowed as a no-op since
+# this editor doesn't support cursor movement.
 prompt_line() {
-  printf '\033[?25h'
-  IFS= read -e -r -p "$1" REPLY || REPLY=""
+  local prompt="$1" buf="" k rest saved
+  PROMPT_CANCELLED=0
+  printf '\033[?25h%s' "$prompt"
+  while true; do
+    IFS= read -rsn1 k || { PROMPT_CANCELLED=1; break; }
+    if [ -z "$k" ]; then
+      break  # Enter
+    elif [ "$k" = $'\e' ]; then
+      rest=''
+      if saved="$(stty -g 2>/dev/null)" && [ -n "$saved" ]; then
+        stty -icanon -echo min 0 time 1 2>/dev/null
+        rest="$(dd bs=6 count=1 2>/dev/null)"
+        stty "$saved" 2>/dev/null
+      else
+        IFS= read -rsn1 -t 1 rest || true
+      fi
+      [ -z "$rest" ] && { PROMPT_CANCELLED=1; break; }
+    elif [ "$k" = $'\x03' ]; then
+      PROMPT_CANCELLED=1
+      break
+    elif [ "$k" = $'\x7f' ] || [ "$k" = $'\b' ]; then
+      if [ -n "$buf" ]; then
+        buf="${buf%?}"
+        printf '\b \b'
+      fi
+    else
+      buf+="$k"
+      printf '%s' "$k"
+    fi
+  done
   printf '\033[?25l'
+  REPLY="$buf"
 }
 
 do_update() {
@@ -784,12 +821,17 @@ put_pagebar() {
 
 draw_market() {
   buf=""
-  local total label
+  local total label sort_disp
   total="$(display_total)"
   label="topic:herdr-plugin"
   [ -n "$m_query" ] && label="\"$m_query\""
-  put '  %bherdr marketplace%b  %b%s · by %s%b' \
-    "$bold$cyan" "$reset" "$dim" "$label" "$m_sort" "$reset"
+  if [ "$m_sort" = stars ]; then
+    sort_disp="${cyan}[stars]${reset} ${dim}updated${reset}"
+  else
+    sort_disp="${dim}stars${reset} ${cyan}[updated]${reset}"
+  fi
+  put '  %bherdr marketplace%b  %b%s · sort: %b%b' \
+    "$bold$cyan" "$reset" "$dim" "$label" "$reset" "$sort_disp"
   [ "$dry_run" = 1 ] && put '  %b[dry-run]%b' "$yellow" "$reset"
   put '\n\n'
 
@@ -805,8 +847,9 @@ draw_market() {
     [ "$end" -ge "$total" ] && end=$(( total - 1 ))
     i=$start
     while [ "$i" -le "$end" ]; do
+      local midx="${dim}$(printf '%4d' "$(( i + 1 ))")${reset} "
       if [ -z "${mrows[$i]:-}" ]; then
-        put '      %b…%b\n' "$dim" "$reset"
+        put '%b      %b…%b\n' "$midx" "$dim" "$reset"
       else
         split_mrow "${mrows[$i]}"
         local cursor="  " pre="" post="" mark="  "
@@ -815,8 +858,8 @@ draw_market() {
           cursor="${cyan}▸ ${reset}"
           pre="$bold" post="$reset"
         fi
-        put '  %b%b%b%-42.42s %b★ %-5s%b%b\n' \
-          "$cursor" "$mark" "$pre" "$m_name" "$yellow" "$m_stars" "$reset" "$post"
+        put '%b  %b%b%b%-42.42s %b★ %-5s%b%b\n' \
+          "$midx" "$cursor" "$mark" "$pre" "$m_name" "$yellow" "$m_stars" "$reset" "$post"
       fi
       i=$(( i + 1 ))
     done
@@ -843,10 +886,15 @@ draw_market() {
 
 # / — re-query the API with extra search terms (matches name/description/readme
 # across the whole topic, not just the loaded rows). Empty input goes back to
-# the unfiltered topic listing.
+# the unfiltered topic listing. Esc cancels without touching the current
+# query/results.
 m_search() {
   printf '\n'
-  prompt_line "  search (empty = all): "
+  prompt_line "  search (empty = all, Esc = cancel): "
+  if [ "$PROMPT_CANCELLED" = 1 ]; then
+    msg="${dim}search cancelled${reset}"
+    return
+  fi
   m_query="$REPLY"
   market_reset
   fetch_market_page 1 || true

@@ -1,6 +1,6 @@
 id = "ray.plugin-manager"
 name = "Plugin Manager"
-version = "0.1.2"
+version = "0.1.3"
 min_herdr_version = "0.7.4"
 description = "Manage herdr plugins from a popup: list, install, update, enable/disable, uninstall, browse the marketplace, open repo in browser, edit plugins.json"
 platforms = ["macos", "linux"]
@@ -9,8 +9,8 @@ platforms = ["macos", "linux"]
 id = "manager"
 title = "Plugin Manager"
 placement = "popup"
-width = 74
-height = 22
+width = 82
+height = 28
 command = ["bash", "-c", "exec bash \"$HERDR_PLUGIN_ROOT/bin/manager.sh\""]
 
 [[actions]]
