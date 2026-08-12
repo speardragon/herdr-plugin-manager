@@ -200,10 +200,14 @@ load_plugins() {
 # ── update checking ─────────────────────────────────────────────────────────
 
 # Compares one plugin's pinned sha against its remote ref, echoing the status
-# word (current|update|error). Standalone so it can be unit-tested.
+# word (current|update|error); when status is "update" and the remote's
+# herdr-plugin.toml can be fetched, appends "\t<remote_version>". Standalone
+# so it can be unit-tested.
 #   $1 repo_slug (owner/repo)  $2 ref (or "-"/"")  $3 full pinned commit
+#   $4 spec (owner/repo[/subdir], to locate herdr-plugin.toml; defaults to $1)
 check_remote() {
-  local slug="$1" ref="$2" commit="$3" target shas
+  local slug="$1" ref="$2" commit="$3" spec="${4:-}" target shas remote_sha subdir manifest_url version
+  [ -n "$spec" ] || spec="$slug"
   target="$ref"
   { [ -z "$target" ] || [ "$target" = "-" ]; } && target="HEAD"
   # perl's alarm hard-caps the whole ls-remote at 8s — git's LOW_SPEED vars only
@@ -214,15 +218,32 @@ check_remote() {
     git ls-remote "https://github.com/$slug" "$target" 2>/dev/null | cut -f1)"
   if [ -z "$shas" ]; then
     printf 'error'
-  elif printf '%s\n' "$shas" | grep -qx "$commit"; then
-    printf 'current'
-  else
-    printf 'update'
+    return
   fi
+  if printf '%s\n' "$shas" | grep -qx "$commit"; then
+    printf 'current'
+    return
+  fi
+  printf 'update'
+  # Best-effort: read the target version straight off the remote manifest at
+  # the exact commit an update would pin to. raw.githubusercontent.com is a
+  # plain file fetch (not the rate-limited GitHub Search/REST API), so this
+  # doesn't compete with the marketplace's api.github.com budget.
+  command -v curl >/dev/null 2>&1 || return 0
+  remote_sha="$(printf '%s\n' "$shas" | head -1)"
+  subdir=""
+  [ "$spec" != "$slug" ] && subdir="${spec#"$slug"/}"
+  manifest_url="https://raw.githubusercontent.com/$slug/$remote_sha"
+  [ -n "$subdir" ] && manifest_url="$manifest_url/$subdir"
+  manifest_url="$manifest_url/herdr-plugin.toml"
+  version="$(curl -s --max-time 5 "$manifest_url" 2>/dev/null | \
+    sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/p' | head -1)"
+  [ -n "$version" ] && printf '\t%s' "$version"
 }
 
-# Checks every github plugin in parallel, writing "<id>\t<status>" lines. Blocks
-# until all checks return (~0.5s); the popup's list is already painted by then.
+# Checks every github plugin in parallel, writing "<id>\t<status>[\t<version>]"
+# lines. Blocks until all checks return (~0.5s, plus a manifest fetch for any
+# plugin with an update); the popup's list is already painted by then.
 run_update_checks() {
   checked=0
   : > "$statusfile"
@@ -236,7 +257,7 @@ run_update_checks() {
     [ "$c_kind" = github ] || continue
     (
       trap - EXIT INT TERM  # don't let a worker subshell run the parent cleanup
-      printf '%s\t%s\n' "$c_id" "$(check_remote "$c_slug" "$c_ref" "$c_full")" >> "$statusfile"
+      printf '%s\t%s\n' "$c_id" "$(check_remote "$c_slug" "$c_ref" "$c_full" "$c_spec")" >> "$statusfile"
     ) &
   done
   wait
@@ -246,6 +267,13 @@ run_update_checks() {
 plugin_status() {
   [ -s "$statusfile" ] || return 0
   awk -F'\t' -v id="$1" '$1==id{print $2; exit}' "$statusfile" 2>/dev/null
+}
+
+# The version an update would move a plugin to, or "" when status isn't
+# "update" or the remote manifest couldn't be read.
+plugin_update_version() {
+  [ -s "$statusfile" ] || return 0
+  awk -F'\t' -v id="$1" '$1==id{print $3; exit}' "$statusfile" 2>/dev/null
 }
 
 check_footer() {
@@ -305,14 +333,19 @@ draw() {
       case "$ent" in
         p:*)
           split_row "${rows[${ent#p:}]}"
-          local status dot state=""
+          local status dot state="" uver
           status="$(plugin_status "$r_id")"
           if [ "$r_en" = 0 ]; then
             dot="${dim}○${reset}"
             state="  ${dim}(disabled)${reset}"
           elif [ "$status" = update ]; then
             dot="${yellow}●${reset}"
-            state="  ${yellow}↑ update${reset}"
+            uver="$(plugin_update_version "$r_id")"
+            if [ -n "$uver" ]; then
+              state="  ${yellow}↑ update → $uver${reset}"
+            else
+              state="  ${yellow}↑ update${reset}"
+            fi
           else
             dot="${green}●${reset}"
           fi
@@ -359,14 +392,20 @@ draw() {
         ;;
       p:*)
         split_row "${rows[${ent#p:}]}"
-        local src="$r_spec"
+        local src="$r_spec" uver
         [ "$r_ref" != "-" ] && src="$src ($r_ref)"
         [ "$r_kind" = local ] && src="local link"
         [ "$r_commit" != "-" ] && src="$src @$r_commit"
         put '  %bid%b      %s\n' "$dim" "$reset" "$r_id"
         put '  %bsource%b  %-60.60s\n' "$dim" "$reset" "$src"
-        [ "$(plugin_status "$r_id")" = update ] && \
-          put '  %b↑ newer commit available — press [u] to install it%b\n' "$yellow" "$reset"
+        if [ "$(plugin_status "$r_id")" = update ]; then
+          uver="$(plugin_update_version "$r_id")"
+          if [ -n "$uver" ]; then
+            put '  %b↑ %s available — press [u] to update%b\n' "$yellow" "$uver" "$reset"
+          else
+            put '  %b↑ newer commit available — press [u] to update%b\n' "$yellow" "$reset"
+          fi
+        fi
         ;;
     esac
   fi

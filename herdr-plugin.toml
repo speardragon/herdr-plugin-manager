@@ -1,6 +1,6 @@
 id = "ray.plugin-manager"
 name = "Plugin Manager"
-version = "0.1.1"
+version = "0.1.2"
 min_herdr_version = "0.7.4"
 description = "Manage herdr plugins from a popup: list, install, update, enable/disable, uninstall, browse the marketplace, open repo in browser, edit plugins.json"
 platforms = ["macos", "linux"]
