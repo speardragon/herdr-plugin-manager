@@ -538,8 +538,11 @@ invoke_action() {
   exit 0
 }
 
-# Runs (or dry-run prints) a long mutating command (install/update) with output
-# streamed — clone/build progress is worth watching — then refreshes + checks.
+# Runs (or dry-run prints) a long mutating command (install/update) attached
+# directly to the terminal, then refreshes + checks. No --yes and no output
+# pipe: herdr's own interactive trust preview (resolved commit, build
+# commands, actions, hooks, panes) plus its [y/N] confirmation is the whole
+# point — it needs the tty, and it only appears when stdin is interactive.
 run_mut() {
   local status=0
   printf '\n'
@@ -548,12 +551,14 @@ run_mut() {
     printf ' %q' "$@"
     printf '\n'
   else
-    "$herdr" "$@" 2>&1 | sed 's/^/  /'
-    status=${PIPESTATUS[0]}
+    printf '\033[?25h'
+    "$herdr" "$@"
+    status=$?
+    printf '\033[?25l'
     if [ "$status" -eq 0 ]; then
       printf '\n  %b✓ done%b\n' "$green" "$reset"
     else
-      printf '\n  %b✗ failed (exit %s)%b\n' "$red" "$status" "$reset"
+      printf '\n  %b✗ cancelled or failed (exit %s)%b\n' "$red" "$status" "$reset"
     fi
   fi
   pause_key
@@ -610,7 +615,7 @@ do_update() {
     return
   fi
   # No dedicated update command: re-installing moves the sha pin to latest.
-  run_mut plugin install "$r_spec" --yes
+  run_mut plugin install "$r_spec"
 }
 
 do_toggle() {
@@ -934,7 +939,7 @@ m_install() {
   local k=""
   IFS= read -rsn1 k || true
   case "$k" in
-    y|Y) run_mut plugin install "$m_name" --yes ;;
+    y|Y) run_mut plugin install "$m_name" ;;
     *) msg="${dim}install cancelled${reset}" ;;
   esac
 }

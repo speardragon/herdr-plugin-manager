@@ -57,7 +57,7 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 
 The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, queried straight from the GitHub Search API. Results are browsed in pages of 10 with a `‹ 1 … 4 [5] 6 … 29 ›` page bar at the bottom; the API is fetched 50 at a time, only for the pages you actually visit (up to the search API's 1000-result cap).
 
-`j`/`k` move (crossing a page boundary flips automatically; each row shows its 1-based position in the full result set at the far left) · `←`/`→` (or `h`/`l`) flip pages, wrapping at the ends · `/` **searches** by re-querying the API (`topic:herdr-plugin + your terms` — matches name/description/readme across the whole topic, not just loaded rows; empty input + Enter returns to the full listing, Esc cancels without changing anything) · `s` toggles the sort between most-starred and most-recently-updated · **Enter installs the selection** (`herdr plugin install owner/repo --yes`; already-installed repos show a `✓`) · `o` opens the repo in your browser · `r` re-fetches with the current query/sort · `q` goes back. The active query and sort are shown in the header; a failed fetch keeps the cursor and loaded list intact.
+`j`/`k` move (crossing a page boundary flips automatically; each row shows its 1-based position in the full result set at the far left) · `←`/`→` (or `h`/`l`) flip pages, wrapping at the ends · `/` **searches** by re-querying the API (`topic:herdr-plugin + your terms` — matches name/description/readme across the whole topic, not just loaded rows; empty input + Enter returns to the full listing, Esc cancels without changing anything) · `s` toggles the sort between most-starred and most-recently-updated · **Enter installs the selection** after a `y/N` confirm — the install itself then runs through herdr's interactive trust preview (resolved commit, build commands, actions, hooks, panes), so nothing executes until you approve exactly what it's about to run; already-installed repos show a `✓` · `o` opens the repo in your browser · `r` re-fetches with the current query/sort · `q` goes back. The active query and sort are shown in the header; a failed fetch keeps the cursor and loaded list intact.
 
 ## Dry-run mode
 
@@ -167,12 +167,12 @@ herdr의 `switch_ascii_input_source_in_prefix` 옵션처럼, **popup이 열릴 �
 | `←` / `→` (또는 `h` / `l`) | **페이지 넘기기** (끝에서 wrap) |
 | `/` | **검색** — 입력한 단어로 GitHub API에 재질의 (`topic:herdr-plugin + 검색어`). 로드된 목록만 거르는 게 아니라 topic 전체의 이름·설명·README를 검색한다. 빈 입력 + Enter = 전체 목록으로 복귀, Esc = 아무것도 바꾸지 않고 취소 |
 | `s` | **정렬 토글** — 별점순(stars) ↔ 최근 업데이트순(updated) |
-| `Enter` | **선택한 플러그인 바로 설치** (`herdr plugin install owner/repo --yes`). 이미 설치된 항목(`✓`)은 안내만 표시 |
+| `Enter` | **선택한 플러그인 설치** — `y/N` 확인 후 herdr의 인터랙티브 설치 프리뷰(대상 커밋, build 커맨드, 액션, 훅, pane)를 보여주며, 거기서 최종 승인해야 실제로 실행된다. 이미 설치된 항목(`✓`)은 안내만 표시 |
 | `o` | 해당 repo를 브라우저로 열기 |
 | `r` | 현재 검색·정렬 기준으로 처음부터 다시 가져오기 |
 | `q` / `Esc` / `m` | 설치된 플러그인 목록으로 돌아가기 |
 
-현재 검색어와 정렬 기준은 헤더에 표시된다 (예: `"viewer" · sort: stars [updated]` — 대괄호가 현재 활성화된 기준). 네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고, 커서와 로드된 목록은 그대로 유지된다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 `herdr plugin install owner/repo/subdir --yes`를 직접 실행하면 된다 (popup에는 설치 기능이 없다 — 설치는 마켓플레이스의 `Enter`를 통해서만 한다).
+현재 검색어와 정렬 기준은 헤더에 표시된다 (예: `"viewer" · sort: stars [updated]` — 대괄호가 현재 활성화된 기준). 네트워크가 없거나 GitHub API rate limit(비인증 검색 분당 10회)에 걸리면 실패 안내가 뜨고, 커서와 로드된 목록은 그대로 유지된다. 일부 저장소는 플러그인이 subdir에 있어 루트 설치가 실패할 수 있는데, 그 경우 `o`로 repo를 열어 README의 설치 경로를 확인한 뒤 `herdr plugin install owner/repo/subdir`를 직접 실행하면 된다 (popup에는 설치 기능이 없다 — 설치는 마켓플레이스의 `Enter`를 통해서만 한다).
 
 ### Dry-run 모드
 
