@@ -256,6 +256,15 @@ check_remote() {
   [ -n "$version" ] && printf '\t%s' "$version"
 }
 
+# First sha git ls-remote reports for a ref, or nothing on failure. Same
+# guards as check_remote: no auth prompts, 8s hard cap on the whole call.
+#   $1 repo_slug (owner/repo)  $2 ref
+resolve_remote_sha() {
+  GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=5 \
+    perl -e 'alarm 8; exec @ARGV' -- \
+    git ls-remote "https://github.com/$1" "$2" 2>/dev/null | head -1 | cut -f1
+}
+
 # Checks every github plugin in parallel, writing "<id>\t<status>[\t<version>]"
 # lines. Blocks until all checks return (~0.5s, plus a manifest fetch for any
 # plugin with an update); the popup's list is already painted by then.
@@ -614,8 +623,39 @@ do_update() {
     msg="${yellow}'$r_name' is a $r_kind plugin — update it from its own checkout${reset}"
     return
   fi
-  # No dedicated update command: re-installing moves the sha pin to latest.
-  run_mut plugin install "$r_spec"
+  # No dedicated update command: re-running install moves the pin. Pass the
+  # requested ref along so the installation's ref policy survives the update;
+  # herdr's interactive preview (via run_mut) stays the final gate.
+  local args=(plugin install "$r_spec")
+  if [ "$r_ref" != "-" ] && is_sha_pin "$r_ref" "$r_full"; then
+    # An exact-sha pin never moves implicitly: resolve where HEAD is, show
+    # the move, and re-pin to that exact commit only on explicit consent.
+    local head_sha
+    head_sha="$(resolve_remote_sha "$r_slug" HEAD)"
+    if [ -z "$head_sha" ]; then
+      msg="${red}could not resolve $r_slug HEAD (needs git + network)${reset}"
+      return
+    fi
+    if [ "$head_sha" = "$r_full" ]; then
+      msg="${green}✓${reset} $r_name is pinned to the latest commit"
+      return
+    fi
+    printf '\n  %b%s is pinned to %s — move the pin to %s (HEAD)? [y/N]%b ' \
+      "$yellow" "$r_name" "${r_full:0:7}" "${head_sha:0:7}" "$reset"
+    local k=""
+    IFS= read -rsn1 k || true
+    case "$k" in
+      y|Y) args+=(--ref "$head_sha") ;;
+      *) msg="${dim}update cancelled — pin kept at ${r_full:0:7}${reset}"; return ;;
+    esac
+  else
+    if [ "$(plugin_status "$r_id")" = current ]; then
+      msg="${green}✓${reset} $r_name is already up to date"
+      return
+    fi
+    [ "$r_ref" != "-" ] && args+=(--ref "$r_ref")
+  fi
+  run_mut "${args[@]}"
 }
 
 do_toggle() {

@@ -38,7 +38,7 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 |-----|--------|
 | `j` / `k` / `↑` / `↓` | Move selection (details of the selected item shown below the list). Each plugin row shows its 1-based position at the far left |
 | `Enter` | On a **plugin row**: fold/unfold its declared actions (accordion, `›`/`⌄`) · on an **action row**: run that action immediately via `herdr plugin action invoke`. Action rows show the key bound to them in your herdr config (e.g. `prefix+p`), and the detail pane shows the binding plus the command the action runs |
-| `u` | Update the selected plugin — herdr has no update command; installs are pinned to a commit sha, so re-running `install` with the same spec moves the pin to latest |
+| `u` | Update the selected plugin — herdr has no update command, so this re-runs `install` **preserving the requested ref**: branch/tag installs update along their own ref, and an exact-sha pin is only moved after an explicit `old → new` confirm. herdr's interactive trust preview (commit, build commands, actions, hooks) is the final gate; already-up-to-date plugins are skipped |
 | `e` | Toggle enable ↔ disable |
 | `x` | Uninstall after a `y/N` confirm (locally linked plugins are unlinked instead) |
 | `o` | Open the plugin's GitHub repo in your browser (subdir plugins open the subdir at the installed commit) |
@@ -47,7 +47,7 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 | `r` | Refresh the list (re-checks updates) |
 | `q` / `Esc` | Close |
 
-**Indicators:** 🟢 `●` enabled & up to date · 🟡 `●` `↑ update → 0.2.0` — a newer commit exists on the GitHub source (press `u`); the target version is read from the remote `herdr-plugin.toml` when that fetch succeeds, otherwise it just shows `↑ update` · ⚪ `○` disabled. The list paints instantly; update status settles ~0.5s later by comparing each plugin's pinned sha against the remote via `git ls-remote`, then (only for plugins with an update) fetching the remote manifest from `raw.githubusercontent.com` for the version string. Locally linked plugins are excluded from update checks.
+**Indicators:** 🟢 `●` enabled & up to date · 🟡 `●` `↑ update → 0.2.0` — a newer commit exists on the GitHub source (press `u`); the target version is read from the remote `herdr-plugin.toml` when that fetch succeeds, otherwise it just shows `↑ update` · ⚪ `○` disabled. The list paints instantly; update status settles ~0.5s later by comparing each plugin's pinned sha against its requested ref (default-branch HEAD when none; exact-sha pins are always current) via `git ls-remote`, then (only for plugins with an update) fetching the remote manifest from `raw.githubusercontent.com` for the version string. Locally linked plugins are excluded from update checks.
 
 **Auto ASCII input (macOS):** like herdr's `switch_ascii_input_source_in_prefix`, opening the popup on a non-ASCII input source (e.g. a Korean IME) switches to your last-used ASCII layout so the single-key TUI works immediately, and the original source is restored when the popup closes — by a detached watchdog, so it works even if the pane is force-closed. Uses the Text Input Source API via osascript (JXA), no extra installs. Disable with `HERDR_PM_ASCII_INPUT=0`.
 
@@ -114,7 +114,7 @@ description = "open plugin manager"
 |----|------|
 | `j` / `k` / `↑` / `↓` | 이동 (선택된 항목의 상세가 하단에 표시). 플러그인 행 맨 왼쪽에 1부터 시작하는 순번이 표시된다 |
 | `Enter` | **플러그인 행**: 액션 목록 펼치기/접기 (아코디언, `›`/`⌄` 표시) · **액션 행**: 그 액션 즉시 실행 |
-| `u` | 업데이트 — 선택한 플러그인을 최신으로. herdr에 update 명령은 없고 설치본이 커밋 sha에 고정되므로, 같은 spec으로 `install`을 재실행하는 방식 |
+| `u` | 업데이트 — herdr에 update 명령이 없어 `install` 재실행 방식이되, **요청 ref를 그대로 유지**한다: 브랜치/태그 설치는 그 ref를 따라 갱신되고, 특정 커밋에 고정(exact-sha pin)된 설치는 `이전 → 새 커밋` 확인을 명시적으로 통과해야만 핀이 이동한다. 최종 승인은 herdr의 인터랙티브 설치 프리뷰(커밋, build 커맨드, 액션, 훅)에서 이뤄지며, 이미 최신이면 건너뛴다 |
 | `e` | enable ↔ disable 토글 |
 | `x` | 삭제 — `y/N` 확인 후 uninstall (로컬 링크 플러그인이면 unlink) |
 | `o` | 선택한 플러그인의 GitHub repo를 브라우저로 열기 (subdir 플러그인은 설치된 커밋의 해당 subdir로 이동) |
@@ -149,7 +149,7 @@ description = "open plugin manager"
 | 🟡 `●` `↑ update → 0.2.0` | enabled · GitHub 원본에 더 새 커밋이 있음 → `u`로 업데이트 (원격 `herdr-plugin.toml`에서 버전을 읽어올 수 있으면 화살표 뒤에 표시, 못 읽어오면 버전 없이 `↑ update`만 표시) |
 | ⚪ `○` `(disabled)` | disabled |
 
-popup을 열면 목록이 즉시 그려지고, 곧이어(≈0.5초) 각 GitHub 플러그인의 설치 커밋 sha를 `git ls-remote`로 원격 최신 커밋과 비교해 표시등을 초록/노랑으로 확정한다. 업데이트가 있으면 그 커밋 시점의 `herdr-plugin.toml`을 `raw.githubusercontent.com`에서 읽어와 버전 문자열도 함께 보여준다 (실패해도 상태 확인 자체에는 영향 없음). 로컬 링크(`herdr plugin link`) 플러그인은 업데이트 확인과 `u` 대상에서 제외된다 — 로컬 checkout에서 직접 갱신하면 된다.
+popup을 열면 목록이 즉시 그려지고, 곧이어(≈0.5초) 각 GitHub 플러그인의 설치 커밋 sha를 `git ls-remote`로 요청 ref(없으면 기본 브랜치 HEAD, 특정 커밋 고정 설치는 항상 최신 취급)의 최신 커밋과 비교해 표시등을 초록/노랑으로 확정한다. 업데이트가 있으면 그 커밋 시점의 `herdr-plugin.toml`을 `raw.githubusercontent.com`에서 읽어와 버전 문자열도 함께 보여준다 (실패해도 상태 확인 자체에는 영향 없음). 로컬 링크(`herdr plugin link`) 플러그인은 업데이트 확인과 `u` 대상에서 제외된다 — 로컬 checkout에서 직접 갱신하면 된다.
 
 #### 자동 영문 전환 (macOS)
 
