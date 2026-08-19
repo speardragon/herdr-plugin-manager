@@ -199,6 +199,14 @@ load_plugins() {
 
 # ── update checking ─────────────────────────────────────────────────────────
 
+# True when a requested ref is an exact commit pin: a hex string that is a
+# prefix of the resolved commit can only be the commit itself.
+#   $1 ref   $2 full resolved commit
+is_sha_pin() {
+  printf '%s\n' "$1" | grep -qE '^[0-9a-fA-F]{7,40}$' || return 1
+  case "$2" in "$1"*) return 0 ;; *) return 1 ;; esac
+}
+
 # Compares one plugin's pinned sha against its remote ref, echoing the status
 # word (current|update|error); when status is "update" and the remote's
 # herdr-plugin.toml can be fetched, appends "\t<remote_version>". Standalone
@@ -210,6 +218,13 @@ check_remote() {
   [ -n "$spec" ] || spec="$slug"
   target="$ref"
   { [ -z "$target" ] || [ "$target" = "-" ]; } && target="HEAD"
+  # An exact-sha pin can never drift, and ls-remote couldn't resolve a bare
+  # sha anyway (it matches refs only) — report current without the network
+  # round-trip.
+  if is_sha_pin "$target" "$commit"; then
+    printf 'current'
+    return
+  fi
   # perl's alarm hard-caps the whole ls-remote at 8s — git's LOW_SPEED vars only
   # cover the transfer phase, so a stalled connect could otherwise freeze the
   # popup for minutes while the startup check blocks the input loop.

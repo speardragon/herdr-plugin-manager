@@ -10,7 +10,7 @@ Plugin rows have 10 fields:
   6 spec         owner/repo[/subdir] or "-"   (display)
   7 short_commit first 7 of resolved_commit or "-"  (display)
   8 repo_slug    owner/repo or "-"            (update check)
-  9 ref          install ref or "-"           (update check)
+  9 ref          requested install ref or "-" (update check)
  10 full_commit  full resolved_commit or "-"  (update check)
 
 Each plugin row is followed by one line per declared action:
@@ -37,7 +37,9 @@ def row(plugin):
             spec = "{}/{}".format(spec, src["subdir"])
         full_commit = src.get("resolved_commit") or "-"
         short_commit = full_commit[:7] if full_commit != "-" else "-"
-        ref = src.get("ref") or "-"
+        # The registry names this source.requested_ref; "ref" is kept as a
+        # fallback for older herdr versions.
+        ref = src.get("requested_ref") or src.get("ref") or "-"
     fields = [
         plugin.get("plugin_id") or "?",
         plugin.get("name") or "?",
