@@ -742,9 +742,13 @@ do_open_repo() {
 # ── marketplace view ─────────────────────────────────────────────────────────
 
 # Sets m_name m_stars m_desc from one marketplace TSV row.
+# m_name feeds `run_mut plugin install "$m_name"` and a URL open below, so a
+# malicious/crafted GitHub result must not reach either as anything but a
+# plain owner/repo[/subdir] slug.
 split_mrow() {
   local IFS=$'\t'
   read -r m_name m_stars m_desc <<< "$1"
+  [[ "$m_name" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$ ]] || m_name=""
 }
 
 market_url() {
