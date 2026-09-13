@@ -214,7 +214,7 @@ is_sha_pin() {
 #   $1 repo_slug (owner/repo)  $2 ref (or "-"/"")  $3 full pinned commit
 #   $4 spec (owner/repo[/subdir], to locate herdr-plugin.toml; defaults to $1)
 check_remote() {
-  local slug="$1" ref="$2" commit="$3" spec="${4:-}" target shas remote_sha subdir manifest_url version
+  local slug="$1" ref="$2" commit="$3" spec="${4:-}" target remote_sha subdir manifest_url version
   [ -n "$spec" ] || spec="$slug"
   target="$ref"
   { [ -z "$target" ] || [ "$target" = "-" ]; } && target="HEAD"
@@ -225,27 +225,25 @@ check_remote() {
     printf 'current'
     return
   fi
-  # perl's alarm hard-caps the whole ls-remote at 8s — git's LOW_SPEED vars only
-  # cover the transfer phase, so a stalled connect could otherwise freeze the
-  # popup for minutes while the startup check blocks the input loop.
-  shas="$(GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=5 \
-    perl -e 'alarm 8; exec @ARGV' -- \
-    git ls-remote "https://github.com/$slug" "$target" 2>/dev/null | cut -f1)"
-  if [ -z "$shas" ]; then
+
+  remote_sha="$(resolve_remote_sha "$slug" "$target")"
+  if [ -z "$remote_sha" ]; then
     printf 'error'
     return
   fi
-  if printf '%s\n' "$shas" | grep -qx "$commit"; then
+
+  if [ "$commit" = "$remote_sha" ]; then
     printf 'current'
     return
   fi
   printf 'update'
+
   # Best-effort: read the target version straight off the remote manifest at
   # the exact commit an update would pin to. raw.githubusercontent.com is a
   # plain file fetch (not the rate-limited GitHub Search/REST API), so this
   # doesn't compete with the marketplace's api.github.com budget.
+  # For annotated tags, remote_sha is the peeled commit sha (tag object shas 404).
   command -v curl >/dev/null 2>&1 || return 0
-  remote_sha="$(printf '%s\n' "$shas" | head -1)"
   subdir=""
   [ "$spec" != "$slug" ] && subdir="${spec#"$slug"/}"
   manifest_url="https://raw.githubusercontent.com/$slug/$remote_sha"
@@ -258,11 +256,39 @@ check_remote() {
 
 # First sha git ls-remote reports for a ref, or nothing on failure. Same
 # guards as check_remote: no auth prompts, 8s hard cap on the whole call.
+# Resolves peeled commit sha for annotated tags.
 #   $1 repo_slug (owner/repo)  $2 ref
 resolve_remote_sha() {
+  local slug="$1" target="${2:-HEAD}"
+  [ "$target" = "-" ] && target="HEAD"
+
+  if printf '%s\n' "$target" | grep -Eq '^[0-9a-fA-F]{40}$'; then
+    printf '%s\n' "$target"
+    return 0
+  fi
+
+  local ref_name="$target"
+  ref_name="${ref_name#refs/tags/}"
+  ref_name="${ref_name#refs/heads/}"
+
+  local ls_args=( "HEAD" "refs/tags/$ref_name" "refs/tags/$ref_name^{}" "refs/heads/$ref_name" )
+
   GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=5 \
     perl -e 'alarm 8; exec @ARGV' -- \
-    git ls-remote "https://github.com/$1" "$2" 2>/dev/null | head -1 | cut -f1
+    git ls-remote "https://github.com/$slug" "${ls_args[@]}" 2>/dev/null | \
+    TARGET="$ref_name" awk '
+      BEGIN { t = ENVIRON["TARGET"] }
+      $2 == "refs/tags/" t "^{}" { peeled = $1 }
+      $2 == "refs/tags/" t       { tag = $1 }
+      $2 == "refs/heads/" t      { branch = $1 }
+      $2 == "HEAD" && (t == "HEAD" || !t) { head = $1 }
+      END {
+        if (peeled) print peeled
+        else if (tag) print tag
+        else if (branch) print branch
+        else if (head) print head
+      }
+    '
 }
 
 # Checks every github plugin in parallel, writing "<id>\t<status>[\t<version>]"
