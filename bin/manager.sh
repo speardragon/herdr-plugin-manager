@@ -541,9 +541,24 @@ invoke_action() {
     msg="${yellow}[dry-run]${reset} close popup → $herdr plugin action invoke $a_pid.$a_aid"
     return
   fi
-  ( nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' -- \
+  # Exiting right after the spawn closes the popup, and herdr tears down that
+  # pane's process group. The child then has to finish POSIX::setsid() -- perl
+  # startup included -- before the teardown reaches it, and it loses that race
+  # often enough to drop roughly one action in three, silently: its stderr goes
+  # to /dev/null and backgrounding returns 0 either way. So wait for the child
+  # to signal that it has detached (capped, since a stuck child must never
+  # leave the popup hanging).
+  local flag="${TMPDIR:-/tmp}/herdr-pm-detached.$$"
+  rm -f "$flag"
+  ( HERDR_PM_FLAG="$flag" nohup perl -MPOSIX -e 'POSIX::setsid(); open(D, ">", $ENV{HERDR_PM_FLAG}) and close D; exec @ARGV' -- \
       bash "$root/bin/invoke_after_close.sh" "$$" "$herdr" "$a_pid.$a_aid" \
       >/dev/null 2>&1 < /dev/null & ) 2>/dev/null
+  local waited=0
+  while [ ! -e "$flag" ] && [ "$waited" -lt 40 ]; do
+    sleep 0.025
+    waited=$(( waited + 1 ))
+  done
+  rm -f "$flag"
   exit 0
 }
 
