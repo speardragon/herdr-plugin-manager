@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in the popup does not behave the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >
+        If it is intermittent, say roughly how often — "about one press in
+        three" is genuinely useful information.
+      placeholder: |
+        1. Open the popup
+        2. Move to a plugin row
+        3. Press u
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        Anything that pins it down: terminal output, a trace, the relevant part
+        of `herdr plugin log`. The popup can also run in any terminal, which is
+        usually the easiest place to see what it prints —
+        `HERDR_PM_DRY_RUN=1 bash bin/manager.sh`.
+      render: shell
+
+  - type: input
+    id: herdr-version
+    attributes:
+      label: herdr version
+      placeholder: "0.9.0"
+    validations:
+      required: true
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: plugin-manager version
+      description: The `version` in `herdr-plugin.toml`, or the commit you are on.
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS and bash version
+      description: "`bash --version | head -1`"
+      placeholder: "macOS 15 / GNU bash 3.2.57"
+    validations:
+      required: true

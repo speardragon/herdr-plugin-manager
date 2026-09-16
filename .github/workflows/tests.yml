@@ -1,0 +1,77 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS ships bash 3.2, which is the floor the README promises —
+          # running the suite under /bin/bash is what keeps that promise real.
+          - name: bash 3.2 (macOS)
+            os: macos-latest
+            shell_path: /bin/bash
+          - name: bash 5 (Linux)
+            os: ubuntu-latest
+            shell_path: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show interpreter versions
+        run: |
+          ${{ matrix.shell_path }} --version | head -1
+          python3 --version
+          perl --version | sed -n 2p
+
+      - name: Syntax check
+        run: |
+          ${{ matrix.shell_path }} -n bin/manager.sh
+          for f in tests/run.sh tests/lib/harness.sh tests/cases/*.sh; do
+            ${{ matrix.shell_path }} -n "$f"
+          done
+
+      - name: Run tests
+        run: ${{ matrix.shell_path }} tests/run.sh
+
+  version:
+    name: version bump
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A reminder for the maintainer, never a gate on the contributor: a PR
+      # that changes what ships should normally carry a version bump, but the
+      # bump is fine to do at merge time instead.
+      - name: Warn when shipped files change without a version bump
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1 --quiet
+
+          changed="$(git diff --name-only "$base"...HEAD -- bin herdr-plugin.toml)"
+          if [ -z "$changed" ]; then
+            echo "no shipped files changed"
+            exit 0
+          fi
+
+          version_of() { git show "$1":herdr-plugin.toml | sed -nE 's/^version = "(.*)"/\1/p'; }
+          before="$(version_of "$base")"
+          after="$(version_of HEAD)"
+
+          if [ "$before" = "$after" ]; then
+            echo "::warning title=No version bump::bin/ changed but herdr-plugin.toml is still $after — bump it before or at merge."
+          else
+            echo "version $before -> $after"
+          fi

@@ -1,0 +1,38 @@
+name: Feature request
+description: Something the popup should be able to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like
+      description: The capability, in a sentence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: >
+        The situation that leads you to want it. A concrete instance of the
+        problem beats a general argument for it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: Rough shape
+      description: >
+        Optional. If you have a view on the key, the wording, or what should
+        stay as it is — say so. Existing behaviour worth preserving is as
+        useful to know as the new behaviour.
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to help?
+      options:
+        - label: I can test a branch
+        - label: I would like to open a PR for this
