@@ -15,7 +15,9 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   `GH_TOKEN`, then `GITHUB_TOKEN`, then `gh auth token`. Anonymous search
   allows 10 requests/minute per IP and authenticated allows 30, so this keeps
   the marketplace well inside budget and makes its requests attributable. Set
-  `HERDR_PM_NO_TOKEN=1` to force anonymous calls.
+  `HERDR_PM_NO_TOKEN=1` to force anonymous calls. The token reaches curl
+  through a stdin config (`-K -`) rather than a `-H` argument, so it stays out
+  of the process list, where another account on the machine could read it.
 - The marketplace page timeout is 20s instead of 8s. A 50-item page is roughly
   330KB and the old cap flaked mid-download on a slow link.
 - A failed marketplace fetch reports the real reason (HTTP status and GitHub's

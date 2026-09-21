@@ -967,6 +967,15 @@ resolve_github_token() {
   github_token="$(gh auth token 2>/dev/null)" || github_token=""
 }
 
+# Curl config for the marketplace call, fed on stdin (-K -) rather than as a
+# -H argument: argv is readable through `ps` by every other account on the box,
+# and this is the user's own gh credential, not a scoped one. Empty output
+# means an anonymous call, which curl accepts as a no-op config.
+market_auth_config() {
+  [ -n "$github_token" ] || return 0
+  printf 'header = "Authorization: Bearer %s"\n' "$github_token"
+}
+
 market_url() {
   local q="topic:herdr-plugin" enc
   if [ -n "$m_query" ]; then
@@ -1024,18 +1033,18 @@ print(d.get("message","") if isinstance(d,dict) else "")' 2>/dev/null)"
 # A page with zero rows is still a success as long as #total arrived — a narrow
 # query can legitimately match nothing.
 fetch_market_page() {
-  local page="$1" json line base n=0 saw_total=0 status rc=0 auth=()
+  local page="$1" json line base n=0 saw_total=0 status rc=0
   case "$m_pages_fetched" in *" $page "*) return 0 ;; esac
   [ "$token_resolved" = 1 ] || { resolve_github_token; token_resolved=1; }
-  [ -n "$github_token" ] && auth=(-H "Authorization: Bearer $github_token")
   buf=""
   put '\n  %bfetching…%b\n' "$dim" "$reset"
   draw_flush
   # The 50-item page is ~330KB; 8s flaked mid-download on a slow link in
   # testing, so allow 20s. -o keeps a partial body out of $json, and rc
-  # distinguishes a timeout from a real HTTP error for the message below.
-  status="$(curl -sS --max-time 20 -o "$tmpdir/market.json" -w '%{http_code}' \
-    -H 'Accept: application/vnd.github+json' "${auth[@]+"${auth[@]}"}" "$(market_url "$page")" 2>/dev/null)"
+  # distinguishes a timeout from a real HTTP error for the message below
+  # (rc is the pipeline's last stage, so it is still curl's).
+  status="$(market_auth_config | curl -s --max-time 20 -o "$tmpdir/market.json" -w '%{http_code}' \
+    -H 'Accept: application/vnd.github+json' -K - "$(market_url "$page")" 2>/dev/null)"
   rc=$?
   json="$(cat "$tmpdir/market.json" 2>/dev/null)" || json=""
   base=$(( (page - 1) * market_per_page ))
