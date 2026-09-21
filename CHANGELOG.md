@@ -9,20 +9,27 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-### Fixed
+## [0.5.0] — 2026-09-21
 
-- Marketplace calls now authenticate when a token is available, resolving
+### Added
+
+- Marketplace calls authenticate when a token is available, resolving
   `GH_TOKEN`, then `GITHUB_TOKEN`, then `gh auth token`. Anonymous search
   allows 10 requests/minute per IP and authenticated allows 30, so this keeps
   the marketplace well inside budget and makes its requests attributable. Set
   `HERDR_PM_NO_TOKEN=1` to force anonymous calls. The token reaches curl
   through a stdin config (`-K -`) rather than a `-H` argument, so it stays out
   of the process list, where another account on the machine could read it.
+  Thanks [@fadlee]. ([#11])
+
+### Fixed
+
 - The marketplace page timeout is 20s instead of 8s. A 50-item page is roughly
-  330KB and the old cap flaked mid-download on a slow link.
+  330KB and the old cap flaked mid-download on a slow link. ([#11])
 - A failed marketplace fetch reports the real reason (HTTP status and GitHub's
   own message, or a timeout or connection failure) instead of one generic
-  "offline or rate limit" line.
+  "offline or rate limit" line. The old path overwrote curl's real HTTP code,
+  so a mid-download timeout was reported as "no network connection". ([#11])
 
 ## [0.4.1] — 2026-09-18
 
@@ -131,7 +138,9 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 Initial release: a popup TUI over the `herdr plugin` CLI — list, install,
 update, enable/disable, uninstall, and a marketplace browser.
 
-[Unreleased]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.2.1...v0.2.2
@@ -146,5 +155,7 @@ update, enable/disable, uninstall, and a marketplace browser.
 [#6]: https://github.com/speardragon/herdr-plugin-manager/issues/6
 [#7]: https://github.com/speardragon/herdr-plugin-manager/pull/7
 [#8]: https://github.com/speardragon/herdr-plugin-manager/issues/8
+[#11]: https://github.com/speardragon/herdr-plugin-manager/pull/11
 [@e-kotov]: https://github.com/e-kotov
+[@fadlee]: https://github.com/fadlee
 [@lamngockhuong]: https://github.com/lamngockhuong
