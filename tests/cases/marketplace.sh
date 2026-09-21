@@ -2,7 +2,7 @@
 # Marketplace fetch failures name the real HTTP status, and the GitHub token
 # resolves from the env with the gh CLI as fallback.
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/harness.sh"
-load_fns market_error resolve_github_token
+load_fns market_error resolve_github_token market_auth_config
 
 # A rate-limited body (what api.github.com returns on the 10/hour anonymous cap).
 rate_body='{"message":"API rate limit exceeded for 1.2.3.4.","documentation_url":"https://docs.github.com/rest"}'
@@ -35,5 +35,14 @@ unset HERDR_PM_NO_TOKEN
 unset -f gh
 PATH=/nonexistent-herdr-pm-test
 check "no token source leaves the call anonymous" "" "$(resolve_github_token; printf '%s' "$github_token")"
+
+# The token travels in curl's stdin config, never in argv, where any other
+# account on the machine could read it out of `ps`.
+github_token=tok123
+check "the auth config carries the token for curl -K -" \
+  'header = "Authorization: Bearer tok123"' "$(market_auth_config)"
+
+github_token=""
+check "no token means an empty config (anonymous call)" "" "$(market_auth_config)"
 
 report
