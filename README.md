@@ -62,6 +62,8 @@ Run `herdr server reload-config`, then press `prefix+p` in any pane.
 
 The same index as [herdr.dev/plugins](https://herdr.dev/plugins/) — public GitHub repos tagged with the `herdr-plugin` topic, queried straight from the GitHub Search API. Results are browsed in pages of 10 with a `‹ 1 … 4 [5] 6 … 29 ›` page bar at the bottom; the API is fetched 50 at a time, only for the pages you actually visit (up to the search API's 1000-result cap).
 
+Requests authenticate when a token is available, resolving `GH_TOKEN`, then `GITHUB_TOKEN`, then `gh auth token`. Anonymous search allows 10 requests per minute per IP and authenticated allows 30, and the herdr server's environment usually has no `GH_TOKEN` even when your shell does — so the `gh` fallback is what normally keeps the marketplace browsing smoothly. Set `HERDR_PM_NO_TOKEN=1` to force anonymous calls. A failed fetch reports the real reason (HTTP status and GitHub's own message, a timeout, or no connection) instead of one generic line.
+
 `j`/`k` move (crossing a page boundary flips automatically; each row shows its 1-based position in the full result set at the far left) · `←`/`→` (or `h`/`l`) flip pages, wrapping at the ends · `/` **searches** by re-querying the API (`topic:herdr-plugin + your terms` — matches name/description/readme across the whole topic, not just loaded rows; empty input + Enter returns to the full listing, Esc cancels without changing anything) · `s` toggles the sort between most-starred and most-recently-updated · **Enter installs the selection** after a `y/N` confirm — the install itself then runs through herdr's interactive trust preview (resolved commit, build commands, actions, hooks, panes), so nothing executes until you approve exactly what it's about to run; already-installed repos show a `✓` · `o` opens the repo in your browser · `r` re-fetches with the current query/sort · `q` goes back. The active query and sort are shown in the header; a failed fetch keeps the cursor and loaded list intact.
 
 ## Dry-run mode
@@ -75,7 +77,7 @@ Every mutating action prints the exact command instead of running it; read-only 
 
 ## Requirements
 
-herdr 0.7.4+ · `python3` (JSON parsing) · `git` (optional, update indicators) · `curl` (marketplace and update-target versions) · `open`/`xdg-open` (the `o` key) · an editor command on `PATH` (the `c` key; `code` is only the fallback).
+herdr 0.7.4+ · `python3` (JSON parsing) · `git` (optional, update indicators) · `curl` (marketplace and update-target versions) · `gh` (optional, marketplace authentication when no token is in the environment) · `open`/`xdg-open` (the `o` key) · an editor command on `PATH` (the `c` key; `code` is only the fallback).
 
 The `c` key resolves its editor in this order: `HERDR_PM_EDITOR`, `VISUAL`,
 `EDITOR`, then `code`. The selected command is run in the popup's foreground
@@ -184,6 +186,8 @@ herdr의 `switch_ascii_input_source_in_prefix` 옵션처럼, **popup이 열릴 �
 
 [herdr.dev/plugins](https://herdr.dev/plugins/)와 같은 인덱스 — GitHub에서 `herdr-plugin` topic이 붙은 공개 저장소를 보여준다 (herdr.dev 페이지 자체가 이 topic의 자동 인덱스라서, 원본인 GitHub Search API를 직접 조회한다). 10개씩 페이지로 나뉘고 하단에 `‹ 1 … 4 [5] 6 … 29 ›` 페이지 바가 표시된다. 데이터는 API에서 50개 단위로 필요한 페이지만 가져온다 (검색 API 상한 1000개).
 
+요청은 토큰이 있으면 인증한다 — `GH_TOKEN` → `GITHUB_TOKEN` → `gh auth token` 순서. 비인증 검색은 IP당 분당 10회, 인증은 30회이며, herdr 서버 환경에는 셸에 토큰이 있어도 `GH_TOKEN`이 없는 경우가 대부분이라 `gh` fallback이 보통 마켓플레이스를 매끄럽게 유지해 준다. `HERDR_PM_NO_TOKEN=1`이면 비인증으로 강제한다. 실패 시에는 원인(HTTP 상태와 GitHub 메시지, 타임아웃, 연결 실패)을 그대로 보여준다.
+
 | 키 | 동작 |
 |----|------|
 | `j` / `k` / `↑` / `↓` | 항목 이동 (페이지 경계를 넘으면 자동으로 다음/이전 페이지). 각 행 맨 왼쪽에 전체 결과 기준 1부터 시작하는 순번이 표시된다 |
@@ -214,6 +218,7 @@ install / update / uninstall / enable / disable / repo 열기 / plugins.json 열
 - `python3` (macOS 기본 포함 — JSON 파싱에만 사용)
 - `git` (선택 — 업데이트 표시등용. 없으면 표시등만 생략)
 - `curl` (macOS 기본 포함 — 마켓플레이스 조회 및 업데이트 대상 버전 조회용)
+- `gh` (선택 — 환경에 토큰이 없을 때 마켓플레이스 인증용)
 - 브라우저 오프너 (`o` 키용 — macOS `open` / Linux `xdg-open`)
 - `c` 키용 편집기 명령 (선택 — `HERDR_PM_EDITOR`, `VISUAL`, `EDITOR` 중 하나; 없으면 `code`를 fallback으로 사용)
 

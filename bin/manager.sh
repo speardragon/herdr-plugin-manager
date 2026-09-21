@@ -49,6 +49,7 @@ m_total=0          # API total_count for the current query
 m_query=""         # extra search terms ('' = whole topic)
 m_sort="stars"     # stars | updated
 m_pages_fetched=" "  # " 1 2 " — API pages already stored
+token_resolved=0    # github_token lookup has run
 
 have_git=0
 command -v git >/dev/null 2>&1 && have_git=1
@@ -949,6 +950,23 @@ split_mrow() {
   [[ "$m_name" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$ ]] || m_name=""
 }
 
+# Bearer token for api.github.com, resolved once. Anonymous search allows 10
+# requests/minute per IP; authenticated allows 30. The marketplace itself stays
+# well inside the anonymous budget (one request per visited page), but the
+# token also makes calls attributable and gives headroom for repeat fetches.
+# The herdr server's env usually lacks GH_TOKEN, so fall back to the gh CLI's
+# stored credential when it is installed. Set HERDR_PM_NO_TOKEN=1 to force
+# anonymous calls.
+github_token=""
+resolve_github_token() {
+  github_token=""
+  [ "${HERDR_PM_NO_TOKEN:-0}" = 1 ] && return 0
+  github_token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+  [ -n "$github_token" ] && return 0
+  command -v gh >/dev/null 2>&1 || return 0
+  github_token="$(gh auth token 2>/dev/null)" || github_token=""
+}
+
 market_url() {
   local q="topic:herdr-plugin" enc
   if [ -n "$m_query" ]; then
@@ -976,18 +994,52 @@ display_total() {
   printf '%s' "$t"
 }
 
+# One-line reason for a failed marketplace fetch, using the real HTTP status and
+# GitHub's own message when the body carries one (rate limits, auth, 5xx all
+# arrive as readable JSON). Falls back to a status-labelled generic line.
+#   $1 http status (000 when curl never connected)  $2 response body
+#   $3 curl exit status (0 on success; 28 is the --max-time cap)
+market_error() {
+  local status="$1" body="$2" rc="${3:-0}" detail
+  if [ "$status" = 000 ]; then
+    printf 'marketplace fetch failed — no network connection'
+    return
+  fi
+  if [ "$rc" = 28 ]; then
+    printf 'marketplace fetch timed out (HTTP %s) — retry with [r]' "$status"
+    return
+  fi
+  detail="$(printf '%s' "$body" | python3 -c \
+    'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit()
+print(d.get("message","") if isinstance(d,dict) else "")' 2>/dev/null)"
+  case "$status" in
+    403|429) printf 'marketplace rate limit (HTTP %s)%s' "$status" "${detail:+ — $detail}" ;;
+    *)       printf 'marketplace fetch failed (HTTP %s)%s' "$status" "${detail:+ — $detail}" ;;
+  esac
+}
+
 # Fetches one API page into its sparse slots (no-op when already stored).
 # A page with zero rows is still a success as long as #total arrived — a narrow
 # query can legitimately match nothing.
 fetch_market_page() {
-  local page="$1" json line base n=0 saw_total=0
+  local page="$1" json line base n=0 saw_total=0 status rc=0 auth=()
   case "$m_pages_fetched" in *" $page "*) return 0 ;; esac
+  [ "$token_resolved" = 1 ] || { resolve_github_token; token_resolved=1; }
+  [ -n "$github_token" ] && auth=(-H "Authorization: Bearer $github_token")
   buf=""
   put '\n  %bfetching…%b\n' "$dim" "$reset"
   draw_flush
-  json="$(curl -s --max-time 8 -H 'Accept: application/vnd.github+json' "$(market_url "$page")" 2>/dev/null)" || json=""
+  # The 50-item page is ~330KB; 8s flaked mid-download on a slow link in
+  # testing, so allow 20s. -o keeps a partial body out of $json, and rc
+  # distinguishes a timeout from a real HTTP error for the message below.
+  status="$(curl -sS --max-time 20 -o "$tmpdir/market.json" -w '%{http_code}' \
+    -H 'Accept: application/vnd.github+json' "${auth[@]+"${auth[@]}"}" "$(market_url "$page")" 2>/dev/null)"
+  rc=$?
+  json="$(cat "$tmpdir/market.json" 2>/dev/null)" || json=""
   base=$(( (page - 1) * market_per_page ))
-  if [ -n "$json" ]; then
+  if [ "$status" = 200 ] && [ "$rc" = 0 ] && [ -n "$json" ]; then
     while IFS= read -r line; do
       case "$line" in
         '') ;;
@@ -997,7 +1049,7 @@ fetch_market_page() {
     done < <(printf '%s' "$json" | python3 "$root/bin/parse_market.py" 2>/dev/null)
   fi
   if [ "$saw_total" = 0 ]; then
-    msg="${red}marketplace fetch failed — offline or GitHub rate limit, try again later${reset}"
+    msg="${red}$(market_error "$status" "$json" "$rc")${reset}"
     return 1
   fi
   m_pages_fetched="${m_pages_fetched}${page} "
