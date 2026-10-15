@@ -408,7 +408,11 @@ draw() {
     put '  %bno plugins installed — press [m] to browse the marketplace%b\n' "$dim" "$reset"
   else
     local max_vis=8 start=0 end i ent nacts marker
-    [ "$sel" -ge "$max_vis" ] && start=$(( sel - max_vis + 1 ))
+    # Keep the selection in the middle once it passes the first half-screen.
+    # Clamp at either end so the viewport stays full near the last item.
+    start=$(( sel - (max_vis - 1) / 2 ))
+    [ "$start" -gt "$(( ${#flat[@]} - max_vis ))" ] && start=$(( ${#flat[@]} - max_vis ))
+    [ "$start" -lt 0 ] && start=0
     end=$(( start + max_vis - 1 ))
     [ "$end" -ge ${#flat[@]} ] && end=$(( ${#flat[@]} - 1 ))
 

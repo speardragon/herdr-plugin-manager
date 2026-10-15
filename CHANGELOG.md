@@ -9,6 +9,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-10-15
+
+### Fixed
+
+- Scroll the installed list as the selection passes the middle of the visible
+  rows, keeping it centered while navigating in either direction. Scrolling
+  stops at the list boundaries so the viewport stays full.
+
 ## [0.5.0] — 2026-09-21
 
 ### Added
@@ -138,7 +146,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 Initial release: a popup TUI over the `herdr plugin` CLI — list, install,
 update, enable/disable, uninstall, and a marketplace browser.
 
-[Unreleased]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/speardragon/herdr-plugin-manager/compare/v0.3.0...v0.4.0
