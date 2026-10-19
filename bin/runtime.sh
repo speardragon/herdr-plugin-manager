@@ -15,11 +15,11 @@ init_python() {
   local candidate
   for candidate in python3 python py; do
     if [ "$candidate" = py ]; then
-      if py -3 -c 'import sys; sys.exit(sys.version_info.major != 3)' >/dev/null 2>&1; then
+      if [ "$(command py -3 -c 'import sys; print(sys.version_info.major)' 2>/dev/null | tr -d '\r')" = 3 ]; then
         pm_python=(py -3)
         return 0
       fi
-    elif command "$candidate" -c 'import sys; sys.exit(sys.version_info.major != 3)' >/dev/null 2>&1; then
+    elif [ "$(command "$candidate" -c 'import sys; print(sys.version_info.major)' 2>/dev/null | tr -d '\r')" = 3 ]; then
       pm_python=("$candidate")
       return 0
     fi

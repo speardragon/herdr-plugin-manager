@@ -17,6 +17,13 @@ check 'broken python3 falls back to python' python "${pm_python[*]}"
 check 'selected interpreter runs UTF-8 scripts' '플러그인 ✓' "$(python3 -c 'print("플러그인 ✓")')"
 check 'Python output encoding is UTF-8' utf-8 "$PYTHONIOENCODING"
 check 'CRLF output is normalized for TSV readers' row "$(python3 -c 'import sys; sys.stdout.write("row\r\n")')"
+printf '#!/bin/sh\nexit 0\n' > "$work/tools with spaces/python3"
+init_python
+check 'successful no-op Store alias is rejected' python "${pm_python[*]}"
+printf '#!/bin/sh\nprintf "2\\n"\n' > "$work/tools with spaces/python3"
+init_python
+check 'Python 2 is rejected' python "${pm_python[*]}"
+printf '#!/bin/sh\nexit 1\n' > "$work/tools with spaces/python3"
 
 printf '#!/bin/sh\nexit 1\n' > "$work/tools with spaces/python"
 printf '#!/bin/sh\n[ "$1" = -3 ] || exit 1\nshift\nexec "%s" "$@"\n' "$real_python" > "$work/tools with spaces/py"
