@@ -17,16 +17,16 @@
 
 ### Task 1: Windows startup and shared runtime
 
-- [ ] Add `bin/windows.ps1`: find Git Bash from override, standard install paths, or Git location; launch manager or open the Windows popup.
-- [ ] Add `bin/runtime.sh`: detect MSYS, normalize paths, probe Python 3 (`python3`, `python`, `py -3`) and force UTF-8 output.
-- [ ] Scope existing manifest entries to macOS/Linux; add `manager-windows` and `open-windows`, version 0.6.0.
-- [ ] Use runtime startup in manager and add Windows URL opening with `explorer.exe`.
-- [ ] Test Python fallback, missing interpreter, paths containing spaces, URL argument preservation, and unchanged Unix behavior with `bash tests/run.sh`.
+- [x] Add `bin/windows.ps1`: find Git Bash from override, standard install paths, or Git location; launch manager or open the Windows popup.
+- [x] Add `bin/runtime.sh`: detect MSYS, normalize paths, probe Python 3 (`python3`, `python`, `py -3`) and force UTF-8 output.
+- [x] Scope existing manifest entries to macOS/Linux; add `manager-windows` and `open-windows`, version 0.6.0.
+- [x] Use runtime startup in manager and add Windows URL opening with Python `os.startfile`.
+- [x] Test Python fallback, missing interpreter, paths containing spaces, URL argument preservation, and unchanged Unix behavior with `bash tests/run.sh`.
 
 ### Task 2: Verification and publication
 
-- [ ] Add Windows Git Bash CI, including PowerShell launcher integration coverage.
-- [ ] Document Windows prerequisites, binding, overrides, and native config location in both README languages; credit the reporter in CHANGELOG.
-- [ ] Run syntax checks, full suites on bash 3.2 and modern bash, and `git diff --check`.
+- [x] Add Windows Git Bash CI, including PowerShell launcher integration coverage.
+- [x] Document Windows prerequisites, binding, overrides, and native config location in both README languages; credit the reporter in CHANGELOG.
+- [x] Run syntax checks, full suites on bash 3.2 and modern bash, and `git diff --check`.
 - [ ] Commit and publish, inspect CI, fix failures, merge once green, release 0.6.0.
 - [ ] Post an English issue reply with release link, Windows setup, tested behavior and limitations; close #13 and verify state.
