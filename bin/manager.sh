@@ -22,8 +22,19 @@ set -uo pipefail
 
 herdr="${HERDR_BIN_PATH:-herdr}"
 root="${HERDR_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+root="${root//\\//}"
+source "$root/bin/runtime.sh"
+init_python || exit $?
+root="$(native_path "$root")"
+herdr="$(native_path "$herdr")"
 dry_run="${HERDR_PM_DRY_RUN:-0}"
-plugins_json="$(dirname "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}")/plugins.json"
+config_dir="$(dirname "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}")"
+if is_windows; then
+  # Windows sockets are named pipes, not files beside config.toml.
+  config_dir="${XDG_CONFIG_HOME:-${APPDATA:-$HOME/.config}}/herdr"
+fi
+config_dir="$(native_path "$config_dir")"
+plugins_json="$config_dir/plugins.json"
 
 rows=()      # plugin rows (TSV from parse_list.py)
 acts=()      # action rows: plugin_id \t action_id \t title \t command
@@ -157,7 +168,7 @@ action_count() {
 # Keybindings for plugin actions from herdr's config.toml ([[keys.command]]
 # entries with type = "plugin_action"), as "full_action_id \t key" rows.
 keymap=()
-herdr_config="$(dirname "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}")/config.toml"
+herdr_config="$(native_path "${HERDR_CONFIG_PATH:-$config_dir/config.toml}")"
 
 load_keymap() {
   local line
@@ -880,9 +891,11 @@ do_uninstall() {
   esac
 }
 
-# Opens a URL in the default browser. macOS `open`, else Linux `xdg-open`.
+# Opens a URL in the default browser without passing it through a shell.
 open_url() {
-  if command -v open >/dev/null 2>&1; then
+  if is_windows; then
+    python3 -c 'import os, sys; os.startfile(sys.argv[1])' "$1" >/dev/null 2>&1
+  elif command -v open >/dev/null 2>&1; then
     open "$1" >/dev/null 2>&1
   elif command -v xdg-open >/dev/null 2>&1; then
     xdg-open "$1" >/dev/null 2>&1

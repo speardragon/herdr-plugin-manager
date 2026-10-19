@@ -1,7 +1,7 @@
 # herdr-plugin-manager
 
 ![herdr 0.7.4+](https://img.shields.io/badge/herdr-0.7.4%2B-8a2be2)
-![platform: macOS / Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-informational)
+![platform: macOS / Linux / Windows](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational)
 ![zero JS dependencies](https://img.shields.io/badge/deps-zero-brightgreen)
 
 ![herdr Plugin Manager popup showing installed plugins with update indicators](assets/updates.png)
@@ -33,6 +33,23 @@ description = "open plugin manager"
 ```
 
 Run `herdr server reload-config`, then press `prefix+p` in any pane.
+
+### Windows
+
+Requires native Windows herdr with plugin popups, **Git for Windows** and
+**Python 3** on PATH (`python3`, `python`, or `py -3`). Install the same repo,
+but use `command = "ray.plugin-manager.open-windows"` in the keybinding above.
+The native config normally lives at `%APPDATA%\herdr\config.toml`.
+
+The Windows action opens `manager-windows` through Windows PowerShell, which
+locates Git Bash explicitly instead of accidentally starting WSL's `bash.exe`.
+Standard system/user Git installs are detected; for a portable/custom install,
+set `HERDR_PM_GIT_BASH` to the full path to Git's `bin\bash.exe` in the herdr
+server environment. Python is probed so the Microsoft Store `python3` alias
+is skipped when it cannot execute scripts. The `o` key uses Windows' default
+browser. The macOS/Linux `open` action and `manager` pane keep their commands.
+
+For a direct launch: `herdr plugin action invoke ray.plugin-manager.open-windows`.
 
 ## Keys
 
@@ -129,6 +146,21 @@ description = "open plugin manager"
 ```
 
 `herdr server reload-config` 실행 후 아무 pane에서나 `prefix+p`를 누르면 popup이 뜬다.
+
+#### Windows
+
+Windows 네이티브 herdr(플러그인 popup 지원 버전), **Git for Windows**, PATH에 등록된
+**Python 3**(`python3`, `python`, `py -3` 중 하나)가 필요하다. 설치 명령은 같고,
+위 키바인딩의 command를 `ray.plugin-manager.open-windows`로 바꾼다.
+기본 설정 파일은 `%APPDATA%\herdr\config.toml`이다.
+
+Windows 액션은 PowerShell에서 Git Bash를 찾아 `manager-windows` pane을 연다.
+WSL의 `bash.exe`는 사용하지 않는다. Git을 별도 경로에 설치했다면 herdr 서버 환경의
+`HERDR_PM_GIT_BASH`를 Git의 `bin\bash.exe` 전체 경로로 지정한다.
+Python은 실제 스크립트 실행으로 확인하므로 작동하지 않는 Microsoft Store 별칭은 건너뛴다.
+`o` 키는 Windows 기본 브라우저를 연다. macOS/Linux의 기존 진입점은 그대로 유지된다.
+
+직접 실행: `herdr plugin action invoke ray.plugin-manager.open-windows`.
 
 ### 키
 
